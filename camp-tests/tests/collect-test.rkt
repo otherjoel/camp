@@ -144,21 +144,21 @@
   (define site (load-test-site))
   (define info (collect site))
   (define term-index (site-info-term-index info))
-  ;; first-post defines REST and API
-  (check-true (hash-has-key? term-index "REST"))
-  (check-true (hash-has-key? term-index "API"))
-  ;; second-post defines JSON
-  (check-true (hash-has-key? term-index "JSON")))
+  ;; first-post defines REST and API (normalized to lowercase)
+  (check-true (hash-has-key? term-index "rest"))
+  (check-true (hash-has-key? term-index "api"))
+  ;; second-post defines JSON (normalized to lowercase)
+  (check-true (hash-has-key? term-index "json")))
 
 (test-case "collect: term-index URLs include fragment with term name"
   (define site (load-test-site))
   (define info (collect site))
   (define term-index (site-info-term-index info))
-  (define rest-url (hash-ref term-index "REST"))
-  ;; Should be page URL + #term-REST (or similar fragment)
+  (define rest-url (hash-ref term-index "rest"))  ; normalized key
+  ;; Should be page URL + #term-rest (normalized fragment)
   (check-pred string? rest-url)
   (check-true (string-contains? rest-url "/blog/2024/01/first-post/"))
-  (check-true (string-contains? rest-url "#")))
+  (check-true (string-contains? rest-url "#term-rest")))
 
 (test-case "collect: duplicate terms - last definition wins"
   ;; If same term defined in multiple docs, the one processed last wins

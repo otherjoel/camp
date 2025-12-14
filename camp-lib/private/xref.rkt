@@ -5,7 +5,13 @@
 
 (provide defterm
          term
-         page-ref)
+         page-ref
+         normalize-term-name)
+
+;; Normalize a term name for use in HTML ids and URL fragments.
+;; Lowercases and replaces spaces with hyphens.
+(define (normalize-term-name name)
+  (string-downcase (string-replace name " " "-")))
 
 (define (defterm name . content)
   ;; Add term to the document's terms-defined metadata list

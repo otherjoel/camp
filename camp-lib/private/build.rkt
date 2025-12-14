@@ -10,7 +10,8 @@
          "structs.rkt"
          "collections.rkt"
          "path-map.rkt"
-         "log.rkt")
+         "log.rkt"
+         "xref.rkt")
 
 (provide collect
          build!)
@@ -118,8 +119,9 @@
 ;; ---------------------------------------------------------------------------
 ;; Term Index
 
-;; Build term index: term-name → url#term-name
+;; Build term index: normalized-term-name → url#term-normalized-name
 ;; Uses hash (equal?-based) for string keys
+;; Term names are normalized (lowercased, spaces→hyphens) for consistent lookup.
 (define (build-term-index pages)
   (for/fold ([index (hash)])
             ([p (in-list pages)])
@@ -131,12 +133,13 @@
       [(list? terms-defined)
        (for/fold ([idx index])
                  ([term (in-list terms-defined)])
+         (define normalized (normalize-term-name term))
          ;; Check for duplicate term
-         (when (hash-has-key? idx term)
+         (when (hash-has-key? idx normalized)
            (log-camp-warning "duplicate term definition: ~a (in ~a, previously defined elsewhere)"
                              term (page-slug p)))
          ;; Last definition wins
-         (hash-set idx term (string-append page-url "#term-" term)))]
+         (hash-set idx normalized (string-append page-url "#term-" normalized)))]
       [else index])))
 
 ;; ---------------------------------------------------------------------------
