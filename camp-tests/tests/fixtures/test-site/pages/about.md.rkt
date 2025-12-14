@@ -1,0 +1,7 @@
+#lang punct
+
+---
+title: About
+---
+
+This is the about page.

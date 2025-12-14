@@ -1,0 +1,14 @@
+*~
+doc/
+\#*
+.\#*
+.DS_Store
+*.swp
+old/
+compiled/
+*.md
+!README.md
+*.html
+*.js
+*.css
+*.txt
