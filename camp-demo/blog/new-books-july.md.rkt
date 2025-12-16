@@ -20,7 +20,5 @@ our collection:
 As always, I encourage our patrons to expand their reading horizons. A
 well-read mind is a well-prepared mind.
 
-•define-term["stacks"]{The shelving area of a library where books are stored,
-typically organized by call number.}
-
-The new books will be available in the •term["stacks"] starting Monday.
+The new books will be available in the •define-term{stacks}—the shelving area
+where books are stored, typically organized by call number—starting Monday.

@@ -6,6 +6,7 @@ doc/
 *.swp
 old/
 compiled/
+publish/
 *.md
 !README.md
 *.html

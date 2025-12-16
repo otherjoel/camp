@@ -3,7 +3,7 @@
 ---
 title: Some Reconsiderations
 date: 1912-08-01
-tags: "music, personal"
+tags: music, personal
 ---
 
 I have been thinking lately about certainty. About how quickly we dismiss
@@ -19,7 +19,7 @@ The children of River City are playing music. Real music. The Wells Fargo
 wagon brought seventy-six trombones, and somehow these children, who had
 never touched an instrument, are learning to play them.
 
-Perhaps the •term["Think System"] is not entirely without merit. Perhaps
+Perhaps the •term{Think System} is not entirely without merit. Perhaps
 belief itself has power.
 
 I find myself reconsidering many things lately.
