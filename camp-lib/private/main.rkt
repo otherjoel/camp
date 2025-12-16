@@ -1,15 +1,30 @@
 #lang racket/base
 
 (require racket/path
+         racket/list
+         racket/format
+         racket/string
          syntax/modresolve
+         punct/doc
+         punct/fetch
          "structs.rkt")
 
 (provide load-site
+         current-site-info
          get-collection
          get-taxonomy-terms
          get-taxonomy-pages
          prev-in
          next-in)
+
+;; ---------------------------------------------------------------------------
+;; Site-Info Parameter
+;;
+;; This parameter holds the current site-info during the build phase.
+;; Render functions can call get-collection, get-taxonomy-*, etc. which
+;; read from this parameter.
+
+(define current-site-info (make-parameter #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Site Loading
@@ -36,19 +51,97 @@
 (define (get-collection name
                         #:limit [limit #f]
                         #:full-docs? [full-docs? #f])
-  ;; TODO: Implement - requires access to current site-info
-  '())
+  (define info (current-site-info))
+  (unless info
+    (error 'get-collection "no site-info available (not in build context)"))
+  (define pages (site-info-pages info))
+  ;; Filter pages by collection name
+  (define coll-pages
+    (filter (λ (p) (equal? (page-collection-name p) name)) pages))
+  (when (null? coll-pages)
+    (error 'get-collection "collection not found: ~a" name))
+  ;; Apply limit if specified
+  (define limited-pages
+    (if (and limit (> (length coll-pages) limit))
+        (take coll-pages limit)
+        coll-pages))
+  ;; Return full docs or page-links
+  (if full-docs?
+      (map page-doc limited-pages)
+      (map page->page-link limited-pages)))
+
+;; Convert a page struct to a page-link
+(define (page->page-link p)
+  (define doc (page-doc p))
+  (define slug (page-slug p))
+  (define title (or (meta-ref doc 'title) slug))
+  (define url (output-path->url (page-output-path p)))
+  (define metas (hash-set (document-metas doc) 'slug slug))
+  (page-link url title metas))
+
+;; Convert output path to URL (web path with leading /)
+(define (output-path->url output-path)
+  (define path-str (path->string output-path))
+  (define normalized (string-replace path-str "\\" "/"))
+  (define clean
+    (if (string-suffix? normalized "/index.html")
+        (substring normalized 0 (- (string-length normalized) 10))
+        normalized))
+  (if (string-prefix? clean "/")
+      clean
+      (string-append "/" clean)))
 
 ;; ---------------------------------------------------------------------------
 ;; Taxonomy Functions
 
+;; Returns distinct taxonomy values ordered by first appearance in the collection.
 (define (get-taxonomy-terms collection-name taxonomy-key)
-  ;; TODO: Implement
-  '())
+  (define info (current-site-info))
+  (unless info
+    (error 'get-taxonomy-terms "no site-info available (not in build context)"))
+  (define pages (site-info-pages info))
+  (define tax-sym (string->symbol taxonomy-key))
+  ;; Filter to collection and extract terms in order of first appearance
+  (define coll-pages
+    (filter (λ (p) (equal? (page-collection-name p) collection-name)) pages))
+  (define seen (make-hash))
+  (define terms
+    (for*/list ([p (in-list coll-pages)]
+                [term (in-list (normalize-taxonomy-value
+                                (meta-ref (page-doc p) tax-sym)))]
+                #:unless (hash-has-key? seen term))
+      (hash-set! seen term #t)
+      term))
+  terms)
 
+;; Get pages for a taxonomy. Two arities:
+;; - (get-taxonomy-pages coll tax) → hash of term → (listof page-link)
+;; - (get-taxonomy-pages coll tax term) → (listof page-link)
 (define (get-taxonomy-pages collection-name taxonomy-key [term #f])
-  ;; TODO: Implement
-  (if term '() (hasheq)))
+  (define info (current-site-info))
+  (unless info
+    (error 'get-taxonomy-pages "no site-info available (not in build context)"))
+  (define tax-index (site-info-taxonomy-index info))
+  (define coll-taxes (hash-ref tax-index collection-name #f))
+  (unless coll-taxes
+    (error 'get-taxonomy-pages "collection not found or has no taxonomies: ~a" collection-name))
+  (define term-hash (hash-ref coll-taxes taxonomy-key #f))
+  (unless term-hash
+    (error 'get-taxonomy-pages "taxonomy not found: ~a in collection ~a" taxonomy-key collection-name))
+  (if term
+      (hash-ref term-hash term '())
+      term-hash))
+
+;; Normalize taxonomy value to a list of strings
+;; Handles: comma-separated string, list of symbols, list of strings, #f
+(define (normalize-taxonomy-value val)
+  (cond
+    [(not val) '()]
+    [(string? val)
+     (map string-trim (string-split val ","))]
+    [(list? val)
+     (map (λ (v) (if (symbol? v) (symbol->string v) (~a v))) val)]
+    [else '()]))
 
 ;; ---------------------------------------------------------------------------
 ;; Page Navigation

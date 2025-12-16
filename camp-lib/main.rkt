@@ -12,7 +12,8 @@
  (hash-view-out context)
  (struct-out page)
  (struct-out page-link)
- (struct-out site-info))
+ (struct-out site-info)
+ current-site-info)
 
 (provide/contract
  [load-site (-> (or/c path-string? module-path?) site?)]

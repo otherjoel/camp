@@ -1,6 +1,7 @@
 #lang scribble/manual
 
 @(require (for-label camp
+                     (except-in camp/page #%module-begin)
                      camp/xref
                      camp/build
                      camp/serve
@@ -233,25 +234,187 @@ Returns @racket[#t] if @racket[_v] is a valid file extension: a string or byte s
 Returns @racket[#t] if @racket[_v] is a valid file extension other than @racket[".rkt"].}
 
 @; =============================================================================
+@section[#:tag "mod-page"]{Structural Page Language}
+
+@defmodulelang[camp/page]
+
+The @tt{#lang camp/page} language provides an alternative to @tt{#lang punct} for pages that are
+primarily structural or organizational---such as tag listings, index pages, and archives---where
+CommonMark processing is not needed and full Racket control over the output is desired.
+
+Unlike Punct documents, @tt{#lang camp/page} documents do not pass through a CommonMark parser.
+Instead, body expressions are wrapped in a thunk and evaluated at render time when site information
+is available. This allows direct use of @racket[get-collection], @racket[get-taxonomy-terms],
+@racket[get-taxonomy-pages], and other retrieval functions within the page content.
+
+@subsection{Document Structure}
+
+A @tt{#lang camp/page} document consists of three sections:
+
+@itemlist[#:style 'ordered
+  @item{@bold{Module-level forms} (optional): @racket[require], @racket[provide], and @racket[define]
+        forms that appear before any metadata. These are lifted to module level and evaluated at load
+        time.}
+  @item{@bold{Metadata}: Keyword-value pairs like @tt{#:title "Page Title"} that define page
+        properties.}
+  @item{@bold{Body}: All remaining forms, including any @racket[define] forms after metadata. These
+        are wrapped in a thunk and evaluated at render time when @racket[current-site-info] is
+        available.}]
+
+@subsection{Example}
+
+@codeblock|{
+#lang camp/page
+
+(require racket/string)  ; lifted to module level
+
+;; Helper defined before metadata - lifted to module level
+(define (format-tag tag)
+  (string-titlecase tag))
+
+#:title "Browse by Tag"
+#:slug "tags"
+
+;; Everything after metadata is in the body thunk
+(define tag-data (get-taxonomy-pages "blog" "tags"))
+
+`(div ((class "content"))
+   (h1 "Browse by Tag")
+   (p "Posts organized by topic:")
+   ,@(for/list ([tag (get-taxonomy-terms "blog" "tags")])
+       `(section ((class "tag-section"))
+          (h2 ,(format-tag tag))
+          (ul ,@(for/list ([pg (hash-ref tag-data tag)])
+                  `(li (a ((href ,(page-link-url pg)))
+                          ,(page-link-title pg))))))))
+}|
+
+@subsection{Metadata Keywords}
+
+Metadata is specified using keyword-value pairs. The value following each keyword is read as a Racket
+datum.
+
+@tabular[#:sep @hspace[2]
+         (list (list @bold{Keyword} @bold{Description})
+               (list @tt{#:title} "Page title (used in templates and page index)")
+               (list @tt{#:slug} "URL slug (defaults to filename if not specified)")
+               (list @tt{#:date} "Publication date (for sorting and feed inclusion)")
+               (list @tt{#:draft?} "If @racket[#t], excludes from feeds and navigation")
+               (list @tt{#:output-path} "Override the collection's output path pattern"))]
+
+Any other keywords are stored in the document metadata and accessible via @racket[meta-ref].
+
+@subsection{Available Bindings}
+
+The @tt{#lang camp/page} language provides all bindings from @racketmodname[racket/base], plus:
+
+@itemlist[
+  @item{All exports from @racketmodname[camp]: @racket[get-collection], @racket[get-taxonomy-terms],
+        @racket[get-taxonomy-pages], @racket[page-link-url], @racket[page-link-title],
+        @racket[page-link-metas], @racket[prev-in], @racket[next-in], etc.}
+  @item{All exports from @racketmodname[punct/doc]: the @racket[document] struct and related
+        utilities.}]
+
+Additional modules can be @racket[require]d as needed.
+
+@subsection{Render Function Integration}
+
+Documents written in @tt{#lang camp/page} produce a Punct-compatible @racket[doc] binding with the
+body thunk stored in metadata. During the build phase, Camp automatically detects this and calls the
+thunk to produce the body content.
+
+@defproc[(camp-page-doc? [doc any/c]) boolean?]{
+Returns @racket[#t] if @racket[_doc] is a document produced by @tt{#lang camp/page}, @racket[#f]
+otherwise. Use this predicate to handle @tt{#lang camp/page} documents differently from Punct
+documents in render functions.}
+
+Render functions can use @racket[camp-page-doc?] to handle @tt{#lang camp/page} documents differently
+from Punct documents:
+
+@codeblock|{
+(require camp/page)  ; for camp-page-doc?
+
+(define (render-page doc context)
+  (define body (hash-ref context 'body))
+
+  (if (camp-page-doc? doc)
+      ;; camp/page: body already includes all markup
+      (layout (meta-ref doc 'title) `((article ,@body)))
+      ;; punct: add title heading
+      (layout (meta-ref doc 'title)
+              `((article (h1 ,(meta-ref doc 'title)) ,@body)))))
+}|
+
+@subsection{Comparison with Punct}
+
+@tabular[#:sep @hspace[2]
+         (list (list @bold{Feature} @bold{#lang punct} @bold{#lang camp/page})
+               (list "Content format" "Markdown with Racket escapes" "Pure Racket x-expressions")
+               (list "CommonMark processing" "Yes" "No")
+               (list "Site retrieval functions" "In render function only" "Directly in page body")
+               (list "Best for" "Prose-heavy content" "Structural/organizational pages"))]
+
+@; =============================================================================
 @section[#:tag "mod-xref"]{Cross-Reference System}
 
 @defmodule[camp/xref]
 
 The @racketmodname[camp/xref] module provides functions for defining terms and creating
-cross-references within Punct source documents.
+cross-references within Punct source documents. The term system works like Scribble's
+@tt{deftech}/@tt{tech}: terms are normalized for lookup, allowing references to match definitions
+even with differences in pluralization or capitalization.
 
-@defproc[(defterm [name string?] [content any/c] ...) list?]{
-Defines a term in a Punct document. Produces a @racket[term-definition] x-expression that will be
-rendered as a @tt{<dfn>} element with an anchor. The term is also indexed for cross-reference
-resolution.
+@subsection{Term Normalization}
 
-In Punct source: @tt{@"•"defterm["REST"]@"{Representational State Transfer@"}"}}
+Term names are normalized for consistent cross-reference resolution:
+@itemlist[
+  @item{Case-folded to lowercase}
+  @item{Trailing @tt{ies} converted to @tt{y} (e.g., ``libraries'' matches ``library'')}
+  @item{Trailing @tt{sses} converted to @tt{ss} (e.g., ``classes'' matches ``class'')}
+  @item{Trailing @tt{s} removed, except after @tt{ss} (e.g., ``APIs'' matches ``api'')}
+  @item{Whitespace collapsed and replaced with hyphens}]
 
-@defproc[(term [name string?]) list?]{
-References a defined term. Produces a @racket[term] x-expression that will be resolved to a link
-during rendering.
+This allows natural prose like ``the @tt{@"•"term@"{APIs@"}"} we discussed'' to resolve to a
+definition of ``API''.
 
-In Punct source: @tt{@"•"term@"{REST@"}"}}
+@subsection{Defining Terms}
+
+@defproc[(defterm [content any/c] ...) list?]{
+Defines a term in a Punct document. The @racket[_content] is displayed as-is and also used to derive
+the normalized key for cross-references. Produces a @racket[term-definition] x-expression rendered
+as a @tt{<dfn>} element with an @tt{id} anchor.
+
+In Punct source:
+@codeblock|{
+•define-term{pianoforte}—the full name of the piano, from Italian
+meaning "soft-loud."
+}|
+
+The term ``pianoforte'' appears in the prose, and an anchor @tt{#term-pianoforte} is created for
+cross-references. The author writes the definition in surrounding prose however they prefer.}
+
+@defproc[(define-term [content any/c] ...) list?]{
+Alias for @racket[defterm].}
+
+@subsection{Referencing Terms}
+
+@defproc[(term [content any/c] ...) list?]{
+References a previously defined term. The @racket[_content] is displayed as-is; its normalized form
+is used to look up the term definition. Produces a @racket[term] x-expression resolved to a
+hyperlink during rendering.
+
+In Punct source:
+@codeblock|{
+A student of the •term{pianoforte} must cultivate patience.
+}|
+
+The word ``pianoforte'' appears as a link to the page and anchor where it was defined.
+
+Because of normalization, @tt{@"•"term@"{APIs@"}"} will successfully link to a definition created
+with @tt{@"•"define-term@"{API@"}"}---the plural ``APIs'' normalizes to ``api'', matching the
+singular definition.}
+
+@subsection{Page References}
 
 @defproc[(page-ref [slug string?] [content any/c] ...) list?]{
 References another page by its slug. Spaces in the slug are normalized to hyphens. If no content is

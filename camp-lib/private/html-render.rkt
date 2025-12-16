@@ -34,20 +34,23 @@
 
     ;; Render a term reference: looks up the term in term-index
     ;; Returns an anchor linking to the term definition, or error marker if unresolved.
-    (define/public (render-term name)
-      (define normalized (normalize-term-name name))
+    ;; content is the already-rendered child elements (the term text to display).
+    (define/public (render-term content)
+      (define term-text (content->text content))
+      (define normalized (normalize-term-name term-text))
       (define url (hash-ref term-index normalized #f))
       (cond
         [url
-         `(a ((href ,url) (class "term-ref")) ,name)]
+         `(a ((href ,url) (class "term-ref")) ,@content)]
         [else
-         (log-camp-warning "unresolved term reference: ~a" name)
-         `(span ((class "unresolved-ref")) ,(format "??~a??" name))]))
+         (log-camp-warning "unresolved term reference: ~a" term-text)
+         `(span ((class "unresolved-ref")) ,(format "??~a??" term-text))]))
 
     ;; Render a term definition: creates a dfn element with an id anchor.
-    ;; content is the already-rendered child elements.
-    (define/public (render-term-definition name content)
-      (define normalized (normalize-term-name name))
+    ;; content is the already-rendered child elements (the term text to display).
+    (define/public (render-term-definition content)
+      (define term-text (content->text content))
+      (define normalized (normalize-term-name term-text))
       `(dfn ((id ,(string-append "term-" normalized)) (class "term-def")) ,@content))
 
     ;; Render a page reference: looks up the slug in page-index.
@@ -70,9 +73,9 @@
     (define (camp-fallback tag attrs elems)
       (match tag
         ['term
-         (render-term (get-attr attrs 'name))]
+         (render-term elems)]
         ['term-definition
-         (render-term-definition (get-attr attrs 'name) elems)]
+         (render-term-definition elems)]
         ['page-ref
          (render-page-ref (get-attr attrs 'slug) elems)]
         [_
