@@ -6,4 +6,6 @@
 (define deps '("base"
                "camp-lib"
                "punct-lib"
-               "html-printer"))
+               "html-printer"
+               "gregor-lib"
+               "toml-config-lib"))

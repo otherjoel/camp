@@ -24,6 +24,9 @@ taxonomies = ["tags", "series"]
 name = "pages"
 source = "pages/*"
 output-paths = "*/"
+render-with = "(camp-demo/render render-page)"
+sort-key = "title"
+order = "ascending"
 
 [[feeds]]
 filename = "feed.atom"

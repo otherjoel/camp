@@ -1,7 +1,10 @@
 #lang racket/base
 
 (require camp
-         punct/doc)
+         camp/page
+         punct/doc
+         punct/fetch
+         racket/list)
 
 (provide render-page
          render-post)
@@ -32,18 +35,42 @@
       (p "© 1912 Marian Paroo. River City, Iowa.")))))
 
 ;; Render function for static pages
+;; Handles both Punct documents and #lang camp/page documents
 (define (render-page doc context)
-  (define title (meta-ref doc 'title "Untitled"))
+  (define title (or (meta-ref doc 'title) "Untitled"))
   (define body (hash-ref context 'body))
-  (layout title
-          `((article
-             (h1 ,title)
-             ,@body))))
+  (define slug (hash-ref context 'slug))
+
+  (cond
+    ;; #lang camp/page documents: body is already fully formed
+    ;; Just wrap in the site layout
+    [(camp-page-doc? doc)
+     (layout title `((article ,@body)))]
+
+    ;; Punct documents: add title and any special content
+    [else
+     ;; Special handling for home page: show recent posts
+     (define extra-content
+       (if (equal? slug "home")
+           (let ([recent-posts (get-collection "blog" #:limit 5)])
+             `((section ((class "recent-posts"))
+                (h2 "Recent Posts")
+                (ul
+                 ,@(for/list ([p recent-posts])
+                     `(li (a ((href ,(page-link-url p)))
+                             ,(page-link-title p))))))))
+           '()))
+
+     (layout title
+             `((article
+                (h1 ,title)
+                ,@body
+                ,@extra-content)))]))
 
 ;; Render function for blog posts
 (define (render-post doc context)
-  (define title (meta-ref doc 'title "Untitled"))
-  (define date (meta-ref doc 'date #f))
+  (define title (or (meta-ref doc 'title) "Untitled"))
+  (define date (meta-ref doc 'date))
   (define body (hash-ref context 'body))
   (define tags (hash-ref (hash-ref context 'taxonomies) "tags" '()))
   (define series (hash-ref (hash-ref context 'taxonomies) "series" '()))
