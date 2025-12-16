@@ -6,8 +6,9 @@
 ;; Instead, body expressions are wrapped in a thunk and evaluated at render
 ;; time when site-info is available.
 ;;
-;; Uses free-identifier=? for robust handling of require/provide/define forms,
-;; including renamed imports and macros.
+;; Uses a recursive macro pattern with local-expand for robust handling of
+;; forms, ensuring each form is compiled before processing the next. This
+;; catches macros that expand to require/provide/define etc.
 
 (require (for-syntax racket/base
                      syntax/kerncase)
@@ -27,127 +28,137 @@
        (procedure? (hash-ref (document-metas doc) 'camp-page-body-thunk #f))))
 
 ;; ---------------------------------------------------------------------------
-;; Form classification (compile-time)
+;; Form classification helpers (compile-time)
 
 (begin-for-syntax
+  (require syntax/kerncase)
+
+  ;; Stop-list for local-expand: kernel forms + require/provide
+  (define stop-list
+    (append (kernel-form-identifier-list)
+            (syntax->list #'(require provide))))
+
   ;; Check if an identifier matches any in a list
   (define (id-matches? id cmp-ids)
     (and (identifier? id)
          (ormap (λ (cmp) (free-identifier=? id cmp)) cmp-ids)))
 
-  ;; Forms that always lift to module level
+  ;; Forms that always lift to module level (including #% variants)
   (define lift-always-ids
-    (syntax->list #'(require provide begin-for-syntax module module*)))
+    (syntax->list #'(require provide #%require #%provide
+                             begin-for-syntax module module*)))
 
   ;; Definition forms (lift before metadata, body after)
   (define definition-ids
-    (syntax->list #'(define define-values define-syntax define-syntaxes))))
-
-;; ---------------------------------------------------------------------------
-;; Custom #%module-begin
-
-(define-syntax (camp-page-module-begin stx)
-  (syntax-case stx ()
-    [(_ form ...)
-     (let ()
-       ;; Process all forms, categorizing them
-       (define-values (lifted-forms metadata-pairs body-forms)
-         (process-forms (syntax->list #'(form ...)) #f '() '() '()))
-
-       ;; Build the module body
-       (with-syntax ([(lifted ...) (reverse lifted-forms)]
-                     [(body ...) (reverse body-forms)]
-                     [meta-hash (build-meta-hash metadata-pairs stx)])
-         #'(base-module-begin
-            ;; Lifted forms (require, provide, define before metadata)
-            lifted ...
-
-            ;; Export doc (camp and punct/doc are already provided by the language)
-            (provide doc)
-
-            ;; The body thunk - evaluated at render time
-            (define body-thunk
-              (λ () (let () body ...)))
-
-            ;; Create Punct-compatible document with thunk in metadata
-            (define doc
-              (document
-               (hash-set meta-hash 'camp-page-body-thunk body-thunk)
-               '()
-               '())))))]))
-
-;; ---------------------------------------------------------------------------
-;; Form Processing (compile-time)
-
-(begin-for-syntax
-  ;; Process forms, returning (values lifted metadata body)
-  ;; in-body?: once we've seen metadata or body content, definitions go to body
-  (define (process-forms forms in-body? lifted metadata body)
-    (if (null? forms)
-        (values lifted metadata body)
-        (let ([form (car forms)]
-              [rest (cdr forms)])
-          (process-one-form form rest in-body? lifted metadata body))))
+    (syntax->list #'(define-values define-syntaxes)))
 
   ;; Get the head identifier of a form (if it's an application)
   (define (form-head-id form)
     (syntax-case form ()
       [(head . _) (identifier? #'head) #'head]
-      [_ #f]))
+      [_ #f])))
 
-  ;; Process a single form by examining its head identifier
-  (define (process-one-form form rest in-body? lifted metadata body)
-    (let ([datum (syntax-e form)])
-      (cond
-        ;; Keyword -> metadata, consume next form as value
-        [(keyword? datum)
-         (when (null? rest)
-           (raise-syntax-error 'camp/page
-                               (format "metadata keyword ~a has no value" datum)
-                               form))
-         (let ([key (string->symbol (keyword->string datum))]
-               [val (car rest)])
-           (process-forms (cdr rest) #t lifted
-                          (cons (cons key val) metadata) body))]
+;; ---------------------------------------------------------------------------
+;; Entry point: #%module-begin
 
-        ;; Check the head identifier of the form
-        [else
-         (let ([head (form-head-id form)])
-           (cond
-             ;; Begin - splice and recurse
-             [(and head (free-identifier=? head #'begin))
-              (syntax-case form ()
-                [(_ inner ...)
-                 (process-forms (append (syntax->list #'(inner ...)) rest)
-                                in-body? lifted metadata body)])]
+(define-syntax (camp-page-module-begin stx)
+  (syntax-case stx ()
+    [(_ form ...)
+     ;; Get here-path for metadata
+     (let ([here-path (let ([src (syntax-source stx)])
+                        (cond
+                          [(path? src) (path->string src)]
+                          [(string? src) src]
+                          [else "unknown"]))])
+       (with-syntax ([here here-path])
+         #'(base-module-begin
+            ;; Start recursive processing: not-in-body, empty metadata, empty body
+            (camp-page-process here #f () () form ...))))]))
 
-             ;; Forms that always lift (require, provide, begin-for-syntax, module, module*)
-             [(and head (id-matches? head lift-always-ids))
-              (process-forms rest in-body? (cons form lifted) metadata body)]
+;; ---------------------------------------------------------------------------
+;; Recursive form processor
+;;
+;; This macro processes forms one at a time, emitting lift forms immediately
+;; so they're compiled before processing subsequent forms. This ensures macros
+;; defined earlier in the file are available when expanding later forms.
+;;
+;; Arguments:
+;;   here-path  - source file path for metadata
+;;   in-body?   - #t after seeing metadata or body content
+;;   metas      - accumulated ((key val) ...) pairs
+;;   bodies     - accumulated body expressions
+;;   form ...   - remaining forms to process
 
-             ;; Definition forms - lift before metadata, body after
-             [(and head (id-matches? head definition-ids))
-              (if in-body?
-                  (process-forms rest #t lifted metadata (cons form body))
-                  (process-forms rest #f (cons form lifted) metadata body))]
+(define-syntax (camp-page-process stx)
+  (syntax-case stx ()
+    ;; Base case: no more forms - emit the final document
+    [(_ here-path in-body? ((key val) ...) (body-expr ...))
+     #'(begin
+         (provide doc)
+         (define body-thunk
+           (λ () (let () body-expr ...)))
+         (define doc
+           (document
+            (for/fold ([h (hasheq 'here-path here-path
+                                  'camp-page-body-thunk body-thunk)])
+                      ([k (in-list (list (quote key) ...))]
+                       [v (in-list (list val ...))])
+              (hash-set h k v))
+            '()
+            '())))]
 
-             ;; Everything else is body content
-             [else
-              (process-forms rest #t lifted metadata (cons form body))]))])))
+    ;; Recursive case: process the next form
+    [(_ here-path in-body? metas bodies form0 rest-forms ...)
+     (let ([current-form #'form0]
+           [datum (syntax-e #'form0)])
+       (cond
+         ;; Keyword -> metadata, consume next form as value
+         [(keyword? datum)
+          (syntax-case #'(rest-forms ...) ()
+            [()
+             (raise-syntax-error 'camp/page
+                                 (format "metadata keyword ~a has no value" datum)
+                                 current-form)]
+            [(val more ...)
+             (let ([key (datum->syntax current-form (string->symbol (keyword->string datum)))])
+               #`(camp-page-process here-path #t
+                                    ((#,key val) #,@#'metas)
+                                    bodies
+                                    more ...))])]
 
-  ;; Build metadata hash expression from alist
-  (define (build-meta-hash pairs stx)
-    (define here-path
-      (let ([src (syntax-source stx)])
-        (cond
-          [(path? src) (path->string src)]
-          [(string? src) src]
-          [else "unknown"])))
-    (for/fold ([h #`(hasheq 'here-path #,here-path)])
-              ([pair (in-list (reverse pairs))])
-      (let ([key (car pair)]
-            [val (cdr pair)])
-        #`(hash-set #,h '#,key #,val)))))
+         ;; Everything else: use local-expand to reveal the true form
+         [else
+          (let* ([expanded (local-expand current-form 'module stop-list)]
+                 [head (form-head-id expanded)])
+            (cond
+              ;; Begin - splice contents and continue
+              [(and head (free-identifier=? head #'begin))
+               (syntax-case expanded ()
+                 [(_ inner ...)
+                  #`(camp-page-process here-path in-body? metas bodies
+                                       inner ... rest-forms ...)])]
+
+              ;; Forms that always lift - emit immediately and continue
+              [(and head (id-matches? head lift-always-ids))
+               #`(begin
+                   #,expanded
+                   (camp-page-process here-path in-body? metas bodies rest-forms ...))]
+
+              ;; Definition forms - lift before metadata, body after
+              [(and head (id-matches? head definition-ids))
+               (if (syntax-e #'in-body?)
+                   ;; After metadata: add to body (append to preserve order)
+                   #`(camp-page-process here-path #t metas
+                                        (#,@(syntax->list #'bodies) #,expanded) rest-forms ...)
+                   ;; Before metadata: emit immediately (lift)
+                   #`(begin
+                       #,expanded
+                       (camp-page-process here-path #f metas bodies rest-forms ...)))]
+
+              ;; Everything else is body content
+              [else
+               #`(camp-page-process here-path #t metas
+                                    (#,@(syntax->list #'bodies) #,expanded) rest-forms ...)]))]))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Reader submodule
