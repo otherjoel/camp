@@ -198,9 +198,9 @@
                        'taxonomies '("tags" "series")))
   (define sorted (sort-pages pages coll))
   (define slugs (map cadr sorted))
-  ;; Dates are: first=2024-01-20, second=2024-02-15, third=2024-03-10
-  ;; Descending order: third (custom-slug), second, first
-  (check-equal? slugs '("custom-slug" "second-post" "first-post")))
+  ;; Dates are: first=2024-01-20, second=2024-02-15, third=2024-03-10, draft=2024-04-01
+  ;; Descending order: draft, third (custom-slug), second, first
+  (check-equal? slugs '("draft-post" "custom-slug" "second-post" "first-post")))
 
 (test-case "sort-pages: ascending order with fixture blog posts"
   (define pages
@@ -214,5 +214,5 @@
                        'taxonomies '("tags" "series")))
   (define sorted (sort-pages pages coll))
   (define slugs (map cadr sorted))
-  ;; Ascending order: first, second, third (custom-slug)
-  (check-equal? slugs '("first-post" "second-post" "custom-slug")))
+  ;; Ascending order: first, second, third (custom-slug), draft
+  (check-equal? slugs '("first-post" "second-post" "custom-slug" "draft-post")))

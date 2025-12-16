@@ -21,7 +21,25 @@
       (check-equal? (normalize-term-name "hello world") "hello-world"))
 
     (test-case "combines lowercase and hyphen replacement"
-      (check-equal? (normalize-term-name "REST API") "rest-api")))
+      (check-equal? (normalize-term-name "REST API") "rest-api"))
+
+    (test-case "strips trailing s for plurals"
+      (check-equal? (normalize-term-name "APIs") "api"))
+
+    (test-case "converts ies to y"
+      (check-equal? (normalize-term-name "libraries") "library"))
+
+    (test-case "preserves ss endings"
+      (check-equal? (normalize-term-name "class") "class"))
+
+    (test-case "strips es after ss (sses -> ss)"
+      (check-equal? (normalize-term-name "classes") "class"))
+
+    (test-case "handles chromatic scale singular"
+      (check-equal? (normalize-term-name "chromatic scale") "chromatic-scale"))
+
+    (test-case "handles chromatic scales plural"
+      (check-equal? (normalize-term-name "chromatic scales") "chromatic-scale")))
 
    (test-suite
     "render-term"
@@ -29,7 +47,7 @@
     (test-case "renders resolved term as anchor"
       (define term-index (hash "rest" "/glossary/#term-rest"))
       (define page-index (hash))
-      (define doc (document (hasheq) '((term ((name "REST")))) '()))
+      (define doc (document (hasheq) '((term () "REST")) '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
                     '(article (a ((href "/glossary/#term-rest") (class "term-ref")) "REST"))))
@@ -37,7 +55,7 @@
     (test-case "renders unresolved term as error marker"
       (define term-index (hash))
       (define page-index (hash))
-      (define doc (document (hasheq) '((term ((name "UNKNOWN")))) '()))
+      (define doc (document (hasheq) '((term () "UNKNOWN")) '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
                     '(article (span ((class "unresolved-ref")) "??UNKNOWN??"))))
@@ -45,10 +63,18 @@
     (test-case "normalizes term name for lookup"
       (define term-index (hash "rest-api" "/glossary/#term-rest-api"))
       (define page-index (hash))
-      (define doc (document (hasheq) '((term ((name "REST API")))) '()))
+      (define doc (document (hasheq) '((term () "REST API")) '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
-                    '(article (a ((href "/glossary/#term-rest-api") (class "term-ref")) "REST API")))))
+                    '(article (a ((href "/glossary/#term-rest-api") (class "term-ref")) "REST API"))))
+
+    (test-case "resolves plural term to singular definition"
+      (define term-index (hash "api" "/glossary/#term-api"))
+      (define page-index (hash))
+      (define doc (document (hasheq) '((term () "APIs")) '()))
+      (define result (camp-doc->html-xexpr doc term-index page-index))
+      (check-equal? result
+                    '(article (a ((href "/glossary/#term-api") (class "term-ref")) "APIs")))))
 
    (test-suite
     "render-term-definition"
@@ -57,23 +83,23 @@
       (define term-index (hash))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((term-definition ((name "REST")) "Representational State Transfer"))
+                            '((term-definition () "REST"))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
                     '(article (dfn ((id "term-rest") (class "term-def"))
-                                   "Representational State Transfer"))))
+                                   "REST"))))
 
     (test-case "normalizes term name for id"
       (define term-index (hash))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((term-definition ((name "REST API")) "An API using REST"))
+                            '((term-definition () "REST API"))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
                     '(article (dfn ((id "term-rest-api") (class "term-def"))
-                                   "An API using REST")))))
+                                   "REST API")))))
 
    (test-suite
     "render-page-ref"
@@ -137,29 +163,29 @@
    (test-suite
     "nested content"
 
-    (test-case "term-definition with bold content"
+    (test-case "term-definition with formatted content extracts text for id"
+      ;; When term has nested formatting like (bold "API"), text extraction
+      ;; should still work to create the normalized id
       (define term-index (hash))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((term-definition ((name "API"))
-                                               (bold "Application") " Programming Interface"))
+                            '((term-definition () (bold "API")))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
                     '(article (dfn ((id "term-api") (class "term-def"))
-                                   (b "Application") " Programming Interface"))))
+                                   (b "API")))))
 
-    (test-case "term-definition with nested link"
-      (define term-index (hash))
+    (test-case "term with formatted content extracts text for lookup"
+      (define term-index (hash "api" "/glossary/#term-api"))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((term-definition ((name "HTTP"))
-                                               "See " (link ((dest "https://tools.ietf.org/html/rfc2616")) "RFC 2616")))
+                            '((term () (bold "API")))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
-                    '(article (dfn ((id "term-http") (class "term-def"))
-                                   "See " (a ((href "https://tools.ietf.org/html/rfc2616")) "RFC 2616")))))
+                    '(article (a ((href "/glossary/#term-api") (class "term-ref"))
+                                 (b "API")))))
 
     (test-case "page-ref with formatted link text"
       (define term-index (hash))
@@ -172,19 +198,21 @@
                     '(article (a ((href "/guide/") (class "page-ref"))
                                  "the " (b "complete") " guide"))))
 
-    (test-case "term-definition containing a term reference"
+    (test-case "paragraph with term definition and term reference"
+      ;; In the new model, term-definition displays its content (the term),
+      ;; so this test shows a term definition followed by prose containing a term reference
       (define term-index (hash "rest" "/glossary/#term-rest"))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((term-definition ((name "RESTful"))
-                                               "An API that follows " (term ((name "REST"))) " principles"))
+                            '((paragraph (term-definition () "RESTful")
+                                         " APIs follow " (term () "REST") " principles."))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
-                    '(article (dfn ((id "term-restful") (class "term-def"))
-                                   "An API that follows "
-                                   (a ((href "/glossary/#term-rest") (class "term-ref")) "REST")
-                                   " principles")))))
+                    '(article (p (dfn ((id "term-restful") (class "term-def")) "RESTful")
+                                 " APIs follow "
+                                 (a ((href "/glossary/#term-rest") (class "term-ref")) "REST")
+                                 " principles.")))))
 
    (test-suite
     "multiple xrefs"
@@ -194,7 +222,7 @@
                                "api" "/glossary/#term-api"))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((paragraph "A " (term ((name "REST"))) " " (term ((name "API"))) " is common."))
+                            '((paragraph "A " (term () "REST") " " (term () "API") " is common."))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
@@ -223,7 +251,7 @@
       (define term-index (hash "rest" "/glossary/#term-rest"))
       (define page-index (hash "tutorial" (page-link "/tutorial/" "Tutorial" (hasheq 'slug "tutorial"))))
       (define doc (document (hasheq)
-                            '((paragraph "Learn about " (term ((name "REST"))) " in our "
+                            '((paragraph "Learn about " (term () "REST") " in our "
                                          (page-ref ((slug "tutorial"))) "."))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
@@ -238,12 +266,12 @@
       (define term-index (hash "api" "/current-page/#term-api"))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((paragraph (term-definition ((name "API")) "Application Programming Interface")
-                                         " is important. Every " (term ((name "API"))) " should be documented."))
+                            '((paragraph (term-definition () "API")
+                                         " is important. Every " (term () "API") " should be documented."))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result
-                    '(article (p (dfn ((id "term-api") (class "term-def")) "Application Programming Interface")
+                    '(article (p (dfn ((id "term-api") (class "term-def")) "API")
                                  " is important. Every "
                                  (a ((href "/current-page/#term-api") (class "term-ref")) "API")
                                  " should be documented."))))
@@ -252,7 +280,7 @@
       (define term-index (hash))
       (define page-index (hash))
       (define doc (document (hasheq)
-                            '((paragraph (term ((name "FOO"))) " and " (term ((name "BAR"))) " are undefined."))
+                            '((paragraph (term () "FOO") " and " (term () "BAR") " are undefined."))
                             '()))
       (define result (camp-doc->html-xexpr doc term-index page-index))
       (check-equal? result

@@ -8,6 +8,6 @@ tags: alpha, beta
 
 •(require camp/xref)
 
-This is the first post. Let me define •defterm["REST"]{Representational State Transfer}.
+This is the first post. Let me define •defterm{REST}: Representational State Transfer.
 
-Also defining •defterm["API"]{Application Programming Interface}.
+Also defining •defterm{API}: Application Programming Interface.

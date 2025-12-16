@@ -67,7 +67,7 @@
 
 (define blog-sources (find-sources fixture-blog-dir ".md.rkt"))
 
-(check-equal? (length blog-sources) 3 "Should find 3 blog posts")
+(check-equal? (length blog-sources) 4 "Should find 4 blog posts (including draft)")
 
 ;; All paths should be absolute
 (check-true (andmap absolute-path? blog-sources))
@@ -83,7 +83,7 @@
 
 ;; Pages collection
 (define pages-sources (find-sources fixture-pages-dir ".md.rkt"))
-(check-equal? (length pages-sources) 1 "Should find 1 page")
+(check-equal? (length pages-sources) 2 "Should find 2 pages (about, home)")
 
 ;; ---------------------------------------------------------------------------
 ;; in-sources tests
@@ -92,7 +92,7 @@
   (for/list ([(path slug doc) (in-sources fixture-blog-dir ".md.rkt")])
     (list slug (hash-ref (document-metas doc) 'title))))
 
-(check-equal? (length collected-posts) 3)
+(check-equal? (length collected-posts) 4)
 
 ;; Check that slugs are correctly extracted
 (define slugs (map car collected-posts))

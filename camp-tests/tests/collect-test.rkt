@@ -52,8 +52,8 @@
   (define info (collect site))
   (define pages (site-info-pages info))
   (check-pred list? pages)
-  ;; Should have 3 blog posts + 1 about page = 4 pages
-  (check-equal? (length pages) 4))
+  ;; Should have 4 blog posts (including draft) + 2 pages (about, home) = 6 pages
+  (check-equal? (length pages) 6))
 
 ;; ---------------------------------------------------------------------------
 ;; Pages list structure
@@ -77,9 +77,9 @@
   ;; Filter blog posts
   (define blog-pages
     (filter (λ (p) (equal? (page-collection-name p) "blog")) pages))
-  ;; Should be sorted descending by date: custom-slug (Mar), second-post (Feb), first-post (Jan)
+  ;; Should be sorted descending by date: draft (Apr), custom-slug (Mar), second-post (Feb), first-post (Jan)
   (define slugs (map page-slug blog-pages))
-  (check-equal? slugs '("custom-slug" "second-post" "first-post")))
+  (check-equal? slugs '("draft-post" "custom-slug" "second-post" "first-post")))
 
 (test-case "collect: output paths are correctly formatted"
   (define site (load-test-site))
@@ -101,8 +101,8 @@
   (define info (collect site))
   (define page-index (site-info-page-index info))
   (check-pred hash? page-index)
-  ;; Should have entries for all 4 pages
-  (check-equal? (hash-count page-index) 4))
+  ;; Should have entries for all 6 pages (4 blog + 2 pages)
+  (check-equal? (hash-count page-index) 6))
 
 (test-case "collect: page-index entries have correct structure"
   (define site (load-test-site))
@@ -209,9 +209,9 @@
   (define info (collect site))
   (define tax-index (site-info-taxonomy-index info))
   (define tags-index (hash-ref (hash-ref tax-index "blog") "tags"))
-  ;; alpha appears in: first-post, custom-slug (third-post)
+  ;; alpha appears in: first-post, custom-slug (third-post), draft-post
   (define alpha-pages (hash-ref tags-index "alpha"))
-  (check-equal? (length alpha-pages) 2)
+  (check-equal? (length alpha-pages) 3)
   ;; beta appears in: first-post, second-post
   (define beta-pages (hash-ref tags-index "beta"))
   (check-equal? (length beta-pages) 2)
@@ -224,10 +224,10 @@
   (define info (collect site))
   (define tax-index (site-info-taxonomy-index info))
   (define tags-index (hash-ref (hash-ref tax-index "blog") "tags"))
-  ;; alpha: custom-slug (Mar 10) should come before first-post (Jan 20) in descending order
+  ;; alpha: draft-post (Apr), custom-slug (Mar 10), first-post (Jan 20) in descending order
   (define alpha-pages (hash-ref tags-index "alpha"))
   (define alpha-titles (map page-link-title alpha-pages))
-  (check-equal? alpha-titles '("Third Post" "First Post")))
+  (check-equal? alpha-titles '("Draft Post" "Third Post" "First Post")))
 
 (test-case "collect: series taxonomy is correctly indexed"
   (define site (load-test-site))
@@ -248,6 +248,31 @@
   (define info (collect site))
   ;; Should not error
   (check-pred site-info? info))
+
+;; ---------------------------------------------------------------------------
+;; output-path metadata override tests
+
+(test-case "collect: output-path meta overrides collection pattern"
+  (define site (load-test-site))
+  (define info (collect site))
+  (define pages (site-info-pages info))
+  ;; Find the home page which has output-path: /
+  (define home-page
+    (findf (λ (p) (equal? (page-slug p) "home")) pages))
+  (check-not-false home-page)
+  ;; Should output to index.html at root, not home/index.html
+  (check-equal? (page-output-path home-page) (build-path "index.html")))
+
+(test-case "collect: output-path with trailing slash adds index.html"
+  (define site (load-test-site))
+  (define info (collect site))
+  (define pages (site-info-pages info))
+  (define home-page
+    (findf (λ (p) (equal? (page-slug p) "home")) pages))
+  (check-not-false home-page)
+  ;; The "/" output-path should become "index.html"
+  (define output-str (path->string (page-output-path home-page)))
+  (check-true (string-suffix? output-str "index.html")))
 
 (test-case "collect: handles collection with no taxonomies defined"
   ;; The pages collection has no taxonomies in site config

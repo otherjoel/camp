@@ -10,6 +10,5 @@
 (define pkg-authors '("Joel Dueck"))
 (define license '(Apache-2.0 OR MIT))
 
-;; Exclude fixtures from compilation and test discovery
-(define compile-omit-paths '("tests/fixtures"))
+;; Exclude fixtures from test discovery (but not compilation, since render.rkt is required)
 (define test-omit-paths '("tests/fixtures"))

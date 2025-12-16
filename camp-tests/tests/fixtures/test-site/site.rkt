@@ -9,10 +9,14 @@ sources = ".md.rkt"
 static-folder = "static"
 output-folder = "publish"
 
+# Use render module from fixtures directory
+default-render = '(camp/tests/fixtures/render render-page)'
+
 [[collections]]
 name = "blog"
 source = "blog/*"
 output-paths = "blog/[yyyy]/[MM]/*/"
+render-with = '(camp/tests/fixtures/render render-post)'
 order = "descending"
 sort-key = "date"
 taxonomies = ["tags", "series"]
@@ -27,4 +31,4 @@ order = "ascending"
 [[feeds]]
 filename = "feed.atom"
 collections = ["blog"]
-render-with = '(test-site/render feed-content)'
+render-with = '(camp/tests/fixtures/render feed-content)'

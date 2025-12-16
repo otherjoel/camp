@@ -9,4 +9,4 @@ series: tutorials
 
 •(require camp/xref)
 
-This is the second post. It references •term{REST} and defines •defterm["JSON"]{JavaScript Object Notation}.
+This is the second post. It references •term{REST} and defines •defterm{JSON}: JavaScript Object Notation.
