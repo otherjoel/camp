@@ -2,10 +2,12 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/logging
          punct/doc
          camp/private/html-render
          camp/private/structs
-         camp/private/xref)
+         camp/private/xref
+         camp/private/log)
 
 (define html-render-tests
   (test-suite
@@ -287,7 +289,61 @@
                     '(article (p (span ((class "unresolved-ref")) "??FOO??")
                                  " and "
                                  (span ((class "unresolved-ref")) "??BAR??")
-                                 " are undefined.")))))))
+                                 " are undefined.")))))
+
+   (test-suite
+    "warning messages"
+
+    (test-case "unresolved term logs warning with source path"
+      (define warnings '())
+      (define (collect-warning! vec)
+        (set! warnings (cons (vector-ref vec 1) warnings)))
+      (define term-index (hash))
+      (define page-index (hash))
+      (define doc (document (hasheq 'here-path "/test/page.md.rkt")
+                            '((term () "UNKNOWN"))
+                            '()))
+      (with-intercepted-logging
+        collect-warning!
+        (λ () (camp-doc->html-xexpr doc term-index page-index))
+        #:logger camp-logger
+        'warning)
+      (check-equal? (length warnings) 1)
+      (check-regexp-match #rx"/test/page.md.rkt" (car warnings))
+      (check-regexp-match #rx"unresolved term reference: UNKNOWN" (car warnings)))
+
+    (test-case "unresolved page ref logs warning with source path"
+      (define warnings '())
+      (define (collect-warning! vec)
+        (set! warnings (cons (vector-ref vec 1) warnings)))
+      (define term-index (hash))
+      (define page-index (hash))
+      (define doc (document (hasheq 'here-path "/test/page.md.rkt")
+                            '((page-ref ((slug "missing"))))
+                            '()))
+      (with-intercepted-logging
+        collect-warning!
+        (λ () (camp-doc->html-xexpr doc term-index page-index))
+        #:logger camp-logger
+        'warning)
+      (check-equal? (length warnings) 1)
+      (check-regexp-match #rx"/test/page.md.rkt" (car warnings))
+      (check-regexp-match #rx"unresolved page reference: missing" (car warnings)))
+
+    (test-case "warning without here-path still works"
+      (define warnings '())
+      (define (collect-warning! vec)
+        (set! warnings (cons (vector-ref vec 1) warnings)))
+      (define term-index (hash))
+      (define page-index (hash))
+      (define doc (document (hasheq) '((term () "UNKNOWN")) '()))
+      (with-intercepted-logging
+        collect-warning!
+        (λ () (camp-doc->html-xexpr doc term-index page-index))
+        #:logger camp-logger
+        'warning)
+      (check-equal? (length warnings) 1)
+      (check-regexp-match #rx"unresolved term reference: UNKNOWN" (car warnings))))))
 
 (module+ main
   (run-tests html-render-tests))

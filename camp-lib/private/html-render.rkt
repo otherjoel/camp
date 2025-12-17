@@ -10,6 +10,7 @@
 (require racket/class
          racket/match
          punct/render/html
+         punct/fetch
          "structs.rkt"
          "xref.rkt"
          "log.rkt")
@@ -21,7 +22,8 @@
   (class punct-html-render%
     (init-field term-index      ; hash: normalized-term-name → url#fragment
                 page-index      ; hash: slug → page-link
-                [element-fallback #f])  ; (or/c #f (-> symbol? list? list? (or/c xexpr? #f)))
+                [element-fallback #f]   ; (or/c #f (-> symbol? list? list? (or/c xexpr? #f)))
+                [source-path #f])       ; (or/c path-string? #f) for warning messages
 
     ;; Helper to extract an attribute value from attrs list
     (define (get-attr attrs key)
@@ -43,7 +45,9 @@
         [url
          `(a ((href ,url) (class "term-ref")) ,@content)]
         [else
-         (log-camp-warning "unresolved term reference: ~a" term-text)
+         (if source-path
+             (log-camp-warning "~a: unresolved term reference: ~a" source-path term-text)
+             (log-camp-warning "unresolved term reference: ~a" term-text))
          `(span ((class "unresolved-ref")) ,(format "??~a??" term-text))]))
 
     ;; Render a term definition: creates a dfn element with an id anchor.
@@ -64,7 +68,9 @@
          (define link-text (if (null? content) (list title) content))
          `(a ((href ,url) (class "page-ref")) ,@link-text)]
         [else
-         (log-camp-warning "unresolved page reference: ~a" slug)
+         (if source-path
+             (log-camp-warning "~a: unresolved page reference: ~a" source-path slug)
+             (log-camp-warning "unresolved page reference: ~a" slug))
          `(span ((class "unresolved-ref")) ,(format "??~a??" slug))]))
 
     ;; -------------------------------------------------------------------------
@@ -91,9 +97,11 @@
 ;; Convenience function to render a document to HTML x-expressions
 ;; using Camp's cross-reference resolution.
 (define (camp-doc->html-xexpr doc term-index page-index [element-fallback #f])
+  (define here-path (meta-ref doc 'here-path))
   (send (new camp-html-render%
              [doc doc]
              [term-index term-index]
              [page-index page-index]
-             [element-fallback element-fallback])
+             [element-fallback element-fallback]
+             [source-path here-path])
         render-document))

@@ -6,7 +6,8 @@
                "html-printer"
                "punct-lib"
                "splitflap-lib"
-               "toml-config-lib"))
+               "toml-config-lib"
+               "web-server-lib"))
 (define pkg-desc "Implementation part of Camp")
 (define version "0.0")
 (define pkg-authors '("Joel Dueck"))

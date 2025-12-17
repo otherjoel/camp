@@ -4,20 +4,25 @@
 ;;
 ;; Usage:
 ;;   raco camp build [--fresh] [--verbose] [site-path]
-;;   raco camp serve [--port N] [--no-watch]  (not yet implemented)
+;;   raco camp serve [--port N] [--no-watch] [site-path]
 ;;   raco camp deploy                          (not yet implemented)
 ;;   raco camp new <name>                      (not yet implemented)
 
 (require racket/cmdline
          racket/file
          racket/format
+         racket/list
+         racket/logging
          racket/match
          racket/path
+         racket/string
          racket/vector
          "main.rkt"
          "build.rkt"
+         "serve.rkt"
          "structs.rkt"
-         "output.rkt")
+         "output.rkt"
+         "log.rkt")
 
 (provide main)
 
@@ -38,7 +43,7 @@
      (define cmd-args (vector-drop args 1))
      (match cmd
        ["build" (run-build cmd-args)]
-       ["serve" (not-implemented "serve")]
+       ["serve" (run-serve cmd-args)]
        ["deploy" (not-implemented "deploy")]
        ["new" (not-implemented "new")]
        ["help" (show-usage)]
@@ -54,8 +59,14 @@
   (displayln "Usage: raco camp <command> [options]")
   (displayln "")
   (displayln "Commands:")
-  (displayln "  build [--fresh] [--verbose] [site-path]  Build the site")
-  (displayln "  serve [--port N] [--no-watch] Start dev server (not yet implemented)")
+  (displayln "  build [options] [site-path]   Build the site")
+  (displayln "    --fresh                     Clear output folder before building")
+  (displayln "    --verbose, -v               Show detailed output")
+  (displayln "    --drama                     Treat warnings as errors (non-zero exit)")
+  (displayln "  serve [options] [site-path]   Start dev server")
+  (displayln "    --port N                    Port number (default: 8000)")
+  (displayln "    --no-watch                  Disable file watching")
+  (displayln "    --apache-log                Use Apache combined log format")
   (displayln "  deploy                        Run deploy script (not yet implemented)")
   (displayln "  new <name>                    Create new site (not yet implemented)")
   (displayln "  help                          Show this help")
@@ -68,6 +79,7 @@
 (define (run-build args)
   (define fresh? #f)
   (define verbose? #f)
+  (define warnings-as-errors? #f)
 
   (define remaining
     (command-line
@@ -78,6 +90,8 @@
                   (set! fresh? #t)]
      [("--verbose" "-v") "Show detailed output"
                          (set! verbose? #t)]
+     [("--drama") "Treat warnings as errors (non-zero exit)"
+                 (set! warnings-as-errors? #t)]
      #:args ([path #f])
      path))
 
@@ -93,6 +107,12 @@
 
   ;; Track total build time
   (define total-start (current-inexact-monotonic-milliseconds))
+
+  ;; Mutable list to collect warnings during build
+  (define warnings '())
+  (define (collect-warning! vec)
+    ;; vec is #(level message data topic)
+    (set! warnings (cons (vector-ref vec 1) warnings)))
 
   ;; Print header
   (displayln "")
@@ -125,28 +145,38 @@
   (define static-dir (build-path (site-root site) (site-static-folder site)))
   (define static-count (count-files-in-directory static-dir))
 
-  ;; Collect pass
+  ;; Collect pass (with warning interception)
   (define-values (info collect-ms)
     (with-timing
-      (with-handlers ([exn:fail?
-                       (λ (e)
-                         (print-error "collecting" (exn-message e))
-                         (exit 1))])
-        (collect site))))
+      (with-intercepted-logging
+        collect-warning!
+        (λ ()
+          (with-handlers ([exn:fail?
+                           (λ (e)
+                             (print-error "collecting" (exn-message e))
+                             (exit 1))])
+            (collect site)))
+        #:logger camp-logger
+        'warning)))
 
   (define page-count (length (site-info-pages info)))
   (print-phase-line "Collect"
                     (format-count-desc page-count "page" coll-count "collection")
                     collect-ms)
 
-  ;; Build pass
+  ;; Build pass (with warning interception)
   (define-values (_ build-ms)
     (with-timing
-      (with-handlers ([exn:fail?
-                       (λ (e)
-                         (print-error "building" (exn-message e))
-                         (exit 1))])
-        (build! site info))))
+      (with-intercepted-logging
+        collect-warning!
+        (λ ()
+          (with-handlers ([exn:fail?
+                           (λ (e)
+                             (print-error "building" (exn-message e))
+                             (exit 1))])
+            (build! site info)))
+        #:logger camp-logger
+        'warning)))
 
   (print-phase-line "Build"
                     (pluralize page-count "page")
@@ -164,11 +194,147 @@
                       (pluralize static-count "file")
                       #f))
 
+  ;; Display warnings if any
+  (define warning-count (length warnings))
+  (when (> warning-count 0)
+    (define root-str (path->string (site-root site)))
+    ;; Ensure root-str ends with / for clean replacement
+    (define root-prefix
+      (if (string-suffix? root-str "/")
+          root-str
+          (string-append root-str "/")))
+    (displayln "")
+    (displayln (~a "  " (yellow "⚠") " " (bold (pluralize warning-count "warning")) ":"))
+    (for ([w (in-list (reverse warnings))])
+      ;; Convert absolute paths to relative by removing the site root prefix
+      (define display-warning (string-replace w root-prefix ""))
+      (displayln (~a "    • " display-warning))))
+
   ;; Done
   (define total-ms (- (current-inexact-monotonic-milliseconds) total-start))
   (displayln "")
-  (displayln (~a "  " (green "✓") " " (bold (~a "Done in " (format-duration total-ms)))))
-  (displayln ""))
+  (if (and warnings-as-errors? (> warning-count 0))
+      (begin
+        (displayln (~a "  " (red "✗") " " (bold (~a "Failed in " (format-duration total-ms)))
+                       " " (dim "(warnings treated as errors)")))
+        (displayln "")
+        (exit 1))
+      (begin
+        (displayln (~a "  " (green "✓") " " (bold (~a "Done in " (format-duration total-ms)))))
+        (displayln ""))))
+
+;; ---------------------------------------------------------------------------
+;; Serve command
+
+(define (run-serve args)
+  (define port 8000)
+  (define watch? #t)
+  (define log-format 'modern)
+
+  (define remaining
+    (command-line
+     #:program "raco camp serve"
+     #:argv args
+     #:once-each
+     [("--port") p "Port number (default: 8000)"
+                 (define n (string->number p))
+                 (unless (and n (exact-positive-integer? n) (<= n 65535))
+                   (eprintf "Error: Invalid port number: ~a\n" p)
+                   (exit 1))
+                 (set! port n)]
+     [("--no-watch") "Disable file watching"
+                     (set! watch? #f)]
+     [("--apache-log") "Use Apache combined log format"
+                       (set! log-format 'apache)]
+     #:args ([path #f])
+     path))
+
+  ;; Determine site path
+  (define resolved-path
+    (cond
+      [remaining remaining]
+      [(file-exists? "site.rkt") "site.rkt"]
+      [else
+       (eprintf "Error: No site.rkt found in current directory.\n")
+       (eprintf "Specify a path: raco camp serve <site-path>\n")
+       (exit 1)]))
+
+  ;; Load site to get output folder
+  (define site
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (print-error "loading site" (exn-message e))
+                       (exit 1))])
+      (load-site resolved-path)))
+
+  (define output-dir (build-path (site-root site) (site-output-folder site)))
+
+  (unless (directory-exists? output-dir)
+    (eprintf "Error: Output folder does not exist: ~a\n" output-dir)
+    (eprintf "Run 'raco camp build' first to generate the site.\n")
+    (exit 1))
+
+  ;; Set up log receiver to display request logs
+  (define log-receiver (make-log-receiver camp-logger 'info))
+
+  ;; Log display thread - reads from receiver and colorizes output
+  (define log-thread
+    (thread
+     (lambda ()
+       (let loop ()
+         (define vec (sync log-receiver))
+         ;; vec is #(level message data topic)
+         (define raw-msg (vector-ref vec 1))
+         ;; Strip "camp: " prefix added by define-logger
+         (define msg (if (string-prefix? raw-msg "camp: ")
+                         (substring raw-msg 6)
+                         raw-msg))
+         (define colorized
+           (if (eq? log-format 'modern)
+               (colorize-modern-log msg)
+               msg))
+         (displayln (~a "  " colorized))
+         (flush-output)
+         (loop)))))
+
+  ;; Start server
+  (define shutdown (start-server output-dir #:port port #:watch? watch? #:log-format log-format))
+
+  ;; Keep running until interrupted
+  (with-handlers ([exn:break? (λ (e)
+                                (displayln "")
+                                (displayln (~a "  " (dim "Shutting down...")))
+                                (shutdown)
+                                (kill-thread log-thread)
+                                (displayln (~a "  " (green "✓") " Server stopped"))
+                                (displayln ""))])
+    (sync never-evt)))
+
+;; Colorize modern log format: "HH:MM:SS METHOD PATH STATUS"
+;; Returns colorized string
+(define (colorize-modern-log msg)
+  (define parts (string-split msg " "))
+  (cond
+    [(>= (length parts) 4)
+     (define time (car parts))
+     (define method (cadr parts))
+     (define status-str (last parts))
+     (define path (string-join (drop-right (cddr parts) 1) " "))
+     (define status (string->number status-str))
+     (~a (dim time) "  "
+         (cyan (~a method #:min-width 4)) "  "
+         (~a path #:min-width 30) "  "
+         (format-status-code status))]
+    [else msg]))
+
+;; Format status code with color and glyph
+(define (format-status-code code)
+  (cond
+    [(not code) (dim "???")]
+    [(< code 300) (~a (green "●") " " (green (~a code)))]   ; 2xx success
+    [(< code 400) (~a (dim "●") " " (dim (~a code)))]       ; 3xx redirect
+    [(< code 500) (~a (yellow "●") " " (yellow (~a code)))] ; 4xx client error
+    [else (~a (red "●") " " (red (~a code)))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Output helpers

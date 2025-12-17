@@ -6,5 +6,6 @@
 (provide/contract
  [start-server (->* (path-string?)
                     (#:port exact-nonnegative-integer?
-                     #:watch? boolean?)
-                    void?)])
+                     #:watch? boolean?
+                     #:log-format (or/c 'modern 'apache))
+                    (-> void?))])

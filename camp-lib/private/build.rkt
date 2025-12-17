@@ -166,8 +166,8 @@
          (define normalized (normalize-term-name term))
          ;; Check for duplicate term
          (when (hash-has-key? idx normalized)
-           (log-camp-warning "duplicate term definition: ~a (in ~a, previously defined elsewhere)"
-                             term (page-slug p)))
+           (log-camp-warning "~a: duplicate term definition: ~a (previously defined elsewhere)"
+                             (page-source-path p) term))
          ;; Last definition wins
          (hash-set idx normalized (string-append page-url "#term-" normalized)))]
       [else index])))
