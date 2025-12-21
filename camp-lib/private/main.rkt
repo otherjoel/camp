@@ -4,6 +4,7 @@
          racket/list
          racket/format
          racket/string
+         racket/rerequire
          syntax/modresolve
          punct/doc
          punct/fetch
@@ -19,10 +20,6 @@
 
 ;; ---------------------------------------------------------------------------
 ;; Site-Info Parameter
-;;
-;; This parameter holds the current site-info during the build phase.
-;; Render functions can call get-collection, get-taxonomy-*, etc. which
-;; read from this parameter.
 
 (define current-site-info (make-parameter #f))
 
@@ -40,8 +37,8 @@
                                                (string->path mod-path))))]
       [else
        (resolve-module-path mod-path #f)]))
+  (dynamic-rerequire resolved)
   (define site-config (dynamic-require resolved 'toml))
-  ;; Add site root directory (parent of the config file)
   (define site-root (simplify-path (build-path resolved 'up)))
   (hash-set site-config 'root site-root))
 
@@ -55,22 +52,18 @@
   (unless info
     (error 'get-collection "no site-info available (not in build context)"))
   (define pages (site-info-pages info))
-  ;; Filter pages by collection name
   (define coll-pages
     (filter (λ (p) (equal? (page-collection-name p) name)) pages))
   (when (null? coll-pages)
     (error 'get-collection "collection not found: ~a" name))
-  ;; Apply limit if specified
   (define limited-pages
     (if (and limit (> (length coll-pages) limit))
         (take coll-pages limit)
         coll-pages))
-  ;; Return full docs or page-links
   (if full-docs?
       (map page-doc limited-pages)
       (map page->page-link limited-pages)))
 
-;; Convert a page struct to a page-link
 (define (page->page-link p)
   (define doc (page-doc p))
   (define slug (page-slug p))
@@ -79,7 +72,6 @@
   (define metas (hash-set (document-metas doc) 'slug slug))
   (page-link url title metas))
 
-;; Convert output path to URL (web path with leading /)
 (define (output-path->url output-path)
   (define path-str (path->string output-path))
   (define normalized (string-replace path-str "\\" "/"))
@@ -94,14 +86,12 @@
 ;; ---------------------------------------------------------------------------
 ;; Taxonomy Functions
 
-;; Returns distinct taxonomy values ordered by first appearance in the collection.
 (define (get-taxonomy-terms collection-name taxonomy-key)
   (define info (current-site-info))
   (unless info
     (error 'get-taxonomy-terms "no site-info available (not in build context)"))
   (define pages (site-info-pages info))
   (define tax-sym (string->symbol taxonomy-key))
-  ;; Filter to collection and extract terms in order of first appearance
   (define coll-pages
     (filter (λ (p) (equal? (page-collection-name p) collection-name)) pages))
   (define seen (make-hash))
@@ -114,9 +104,6 @@
       term))
   terms)
 
-;; Get pages for a taxonomy. Two arities:
-;; - (get-taxonomy-pages coll tax) → hash of term → (listof page-link)
-;; - (get-taxonomy-pages coll tax term) → (listof page-link)
 (define (get-taxonomy-pages collection-name taxonomy-key [term #f])
   (define info (current-site-info))
   (unless info
@@ -132,8 +119,6 @@
       (hash-ref term-hash term '())
       term-hash))
 
-;; Normalize taxonomy value to a list of strings
-;; Handles: comma-separated string, list of symbols, list of strings, #f
 (define (normalize-taxonomy-value val)
   (cond
     [(not val) '()]

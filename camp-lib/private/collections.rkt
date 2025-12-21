@@ -33,7 +33,7 @@
 
 (define (is-source? p source-extension)
   (and (path-has-extension? p (string->bytes/utf-8 source-extension))
-       (not (regexp-match? #rx#"\\.#" (if (path? p) (path->bytes p) p))))) ; exclude Emacs backups
+       (not (regexp-match? #rx#"\\.#" (if (path? p) (path->bytes p) p)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Source File Discovery
@@ -56,7 +56,6 @@
 ;; ---------------------------------------------------------------------------
 ;; Source Iteration
 
-;; Yields: (values path slug doc) for each source file
 (define (in-sources root source-extension)
   (define paths (find-sources root source-extension))
   (make-do-sequence
@@ -90,7 +89,6 @@
     [(and (equal? sort-key "date") (string? val)) (iso8601->date val)]
     [else val]))
 
-;; Each page is (list path slug doc). Raises error if sort-key metadata is missing.
 (define (sort-pages pages coll)
   (define sort-key (collection-sort-key coll))
   (define order (collection-order coll))

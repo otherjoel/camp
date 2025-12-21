@@ -25,12 +25,9 @@
 ;; ---------------------------------------------------------------------------
 ;; Color support
 
-;; Parameter to enable/disable color output
-;; Auto-detects TTY by default
 (define use-color?
   (make-parameter (terminal-port? (current-output-port))))
 
-;; ANSI color codes
 (define ansi-codes
   (hasheq 'reset   "\033[0m"
           'bold    "\033[1m"
@@ -45,7 +42,6 @@
           'bright-green  "\033[92m"
           'bright-cyan   "\033[96m"))
 
-;; Wrap text with ANSI color codes
 (define (color code text)
   (if (use-color?)
       (string-append (hash-ref ansi-codes code "")
@@ -53,7 +49,6 @@
                      (hash-ref ansi-codes 'reset))
       text))
 
-;; Convenience functions
 (define (dim text)    (color 'dim text))
 (define (green text)  (color 'green text))
 (define (cyan text)   (color 'cyan text))
@@ -64,8 +59,6 @@
 ;; ---------------------------------------------------------------------------
 ;; Timing
 
-;; Macro to capture elapsed time alongside a result
-;; Returns (values result elapsed-ms)
 (define-syntax-rule (with-timing body ...)
   (let ([start (current-inexact-monotonic-milliseconds)])
     (define result (let () body ...))
@@ -75,24 +68,18 @@
 ;; ---------------------------------------------------------------------------
 ;; Formatting
 
-;; Format milliseconds as human-readable duration
-;; < 1000ms: "15ms"
-;; >= 1000ms: "1.50s"
 (define (format-duration ms)
   (define rounded (inexact->exact (round ms)))
   (if (< rounded 1000)
       (~a rounded "ms")
       (~a (~r (/ ms 1000.0) #:precision '(= 2) #:notation 'positional) "s")))
 
-;; Right-align a string to a given width
 (define (right-align str width)
   (~a str #:min-width width #:align 'right))
 
 ;; ---------------------------------------------------------------------------
 ;; File utilities
 
-;; Count files (not directories) in a directory recursively.
-;; Returns 0 if directory doesn't exist.
 (define (count-files-in-directory dir)
   (if (not (directory-exists? dir))
       0

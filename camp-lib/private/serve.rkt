@@ -1,7 +1,6 @@
 #lang racket/base
 
 ;; Static file server for Camp dev server
-;; Ported from Mercury's static-web.rkt
 
 (require html-printer
          net/mime-type
@@ -33,12 +32,6 @@
 
 ;; ============================================================================
 ;; Logging dispatcher
-;;
-;; Two formats available:
-;; - 'modern: Clean format "HH:MM:SS METHOD PATH CODE" (colorized by CLI)
-;; - 'apache: Traditional Apache combined log format
-;;
-;; All logging goes through log-camp-info. The CLI intercepts and colorizes.
 
 (define (zpad n)
   (cond
@@ -46,7 +39,6 @@
     [(< n 10) (string-append "0" (number->string n))]
     [else (number->string n)]))
 
-;; Simple time format: HH:MM:SS
 (define (simple-time)
   (define now (seconds->date (current-seconds)))
   (format "~a:~a:~a"
@@ -54,7 +46,6 @@
           (zpad (date-minute now))
           (zpad (date-second now))))
 
-;; Apache-style datetime
 (define (apache-log-datetime)
   (define now (seconds->date (current-seconds)))
   (match-define (date* sec min hr day month-num yr _wkday _yrday _dst tz-offset _ns _tzname) now)
@@ -67,8 +58,6 @@
           (zpad (quotient (abs tz-offset) 3600))
           (zpad (/ (remainder (abs tz-offset) 3600) 60))))
 
-;; Modern log format: plain text, colorized by CLI
-;; Format: "HH:MM:SS METHOD PATH STATUS"
 (define (log-modern req resp)
   (define method (string-upcase (bytes->string/utf-8 (request-method req))))
   (define path (url->string (request-uri req)))
@@ -79,7 +68,6 @@
                  path
                  code))
 
-;; Apache log format: traditional combined format
 (define (log-apache req resp)
   (log-camp-info
    "~a - - [~a] \"~a ~a HTTP/1.1\" ~a -"
@@ -89,8 +77,6 @@
    (url->string (request-uri req))
    (response-code resp)))
 
-;; Create logging dispatcher with specified format
-;; log-format: 'modern or 'apache
 (define (log:make dispatcher #:format [log-format 'modern])
   (define log-fn (if (eq? log-format 'apache) log-apache log-modern))
   (lambda (conn req)
@@ -240,13 +226,12 @@
 
   (define server-url (~a "http://localhost:" port))
 
-  ;; Print startup message
   (displayln "")
   (displayln (~a "  " (bold "camp serve")))
   (displayln (~a "  " (dim "Serving") " " (path->string (simplify-path base-dir))))
   (displayln (~a "  " (dim "URL") "     " (cyan server-url)))
   (when watch?
-    (displayln (~a "  " (dim "Watch mode not yet implemented"))))
+    (displayln (~a "  " (dim "Watching for changes..."))))
   (displayln "")
   (displayln (~a "  " (dim "Press Ctrl+C to stop")))
   (displayln "")

@@ -24,13 +24,12 @@
 (define (wildcard? p)
   (equal? *wildcard (if (path? p) p (string->path p))))
 
-(define (extract-bracketed-patterns str) ; "[yyyy]-[MM]" -> '("yyyy" "MM")
+(define (extract-bracketed-patterns str)
   (regexp-match* #rx"\\[([^][]+)\\]" str #:match-select cadr))
 
 (define (contains-brackets? str)
   (regexp-match? #rx"\\[[^][]+\\]" str))
 
-;; Validates CLDR patterns; rejects tz-requiring patterns since we only have dates
 (define (all-brackets-valid-cldr? str)
   (define patterns (extract-bracketed-patterns str))
   (for/and ([pattern (in-list patterns)])

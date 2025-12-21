@@ -1,11 +1,6 @@
 #lang racket/base
 
-;; camp-html-render%
-;;
-;; Extends punct-html-render% to handle Camp's cross-reference elements:
-;; - term: references to term definitions
-;; - term-definition: defines a term with an anchor
-;; - page-ref: references to other pages by slug
+;; Extends punct-html-render% for Camp cross-reference elements
 
 (require racket/class
          racket/match
@@ -20,23 +15,15 @@
 
 (define camp-html-render%
   (class punct-html-render%
-    (init-field term-index      ; hash: normalized-term-name → url#fragment
-                page-index      ; hash: slug → page-link
-                [element-fallback #f]   ; (or/c #f (-> symbol? list? list? (or/c xexpr? #f)))
-                [source-path #f])       ; (or/c path-string? #f) for warning messages
+    (init-field term-index
+                page-index
+                [element-fallback #f]
+                [source-path #f])
 
-    ;; Helper to extract an attribute value from attrs list
     (define (get-attr attrs key)
       (define pair (assoc key attrs))
       (and pair (cadr pair)))
 
-    ;; -------------------------------------------------------------------------
-    ;; Public methods for rendering xref elements
-    ;; These can be overridden by subclasses for custom rendering.
-
-    ;; Render a term reference: looks up the term in term-index
-    ;; Returns an anchor linking to the term definition, or error marker if unresolved.
-    ;; content is the already-rendered child elements (the term text to display).
     (define/public (render-term content)
       (define term-text (content->text content))
       (define normalized (normalize-term-name term-text))
@@ -50,15 +37,11 @@
              (log-camp-warning "unresolved term reference: ~a" term-text))
          `(span ((class "unresolved-ref")) ,(format "??~a??" term-text))]))
 
-    ;; Render a term definition: creates a dfn element with an id anchor.
-    ;; content is the already-rendered child elements (the term text to display).
     (define/public (render-term-definition content)
       (define term-text (content->text content))
       (define normalized (normalize-term-name term-text))
       `(dfn ((id ,(string-append "term-" normalized)) (class "term-def")) ,@content))
 
-    ;; Render a page reference: looks up the slug in page-index.
-    ;; content is the already-rendered child elements (used as link text if non-empty).
     (define/public (render-page-ref slug content)
       (define pl (hash-ref page-index slug #f))
       (cond
@@ -73,9 +56,6 @@
              (log-camp-warning "unresolved page reference: ~a" slug))
          `(span ((class "unresolved-ref")) ,(format "??~a??" slug))]))
 
-    ;; -------------------------------------------------------------------------
-    ;; Fallback dispatcher
-
     (define (camp-fallback tag attrs elems)
       (match tag
         ['term
@@ -85,7 +65,6 @@
         ['page-ref
          (render-page-ref (get-attr attrs 'slug) elems)]
         [_
-         ;; Try element-fallback first, then default
          (cond
            [(and element-fallback (element-fallback tag attrs elems))
             => values]
@@ -94,8 +73,6 @@
 
     (super-new [render-fallback camp-fallback])))
 
-;; Convenience function to render a document to HTML x-expressions
-;; using Camp's cross-reference resolution.
 (define (camp-doc->html-xexpr doc term-index page-index [element-fallback #f])
   (define here-path (meta-ref doc 'here-path))
   (send (new camp-html-render%
