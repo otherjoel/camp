@@ -51,18 +51,19 @@
   (define info (current-site-info))
   (unless info
     (error 'get-collection "no site-info available (not in build context)"))
-  (define pages (site-info-pages info))
-  (define coll-pages
-    (filter (λ (p) (equal? (page-collection-name p) name)) pages))
-  (when (null? coll-pages)
+  (define result
+    (if full-docs?
+        (hash-ref (site-info-pages-by-collection info) name #f)
+        (hash-ref (site-info-page-links-by-collection info) name #f)))
+  (unless result
     (error 'get-collection "collection not found: ~a" name))
-  (define limited-pages
-    (if (and limit (> (length coll-pages) limit))
-        (take coll-pages limit)
-        coll-pages))
+  (define limited
+    (if (and limit (> (length result) limit))
+        (take result limit)
+        result))
   (if full-docs?
-      (map page-doc limited-pages)
-      (map page->page-link limited-pages)))
+      (map page-doc limited)
+      limited))
 
 (define (page->page-link p)
   (define doc (page-doc p))

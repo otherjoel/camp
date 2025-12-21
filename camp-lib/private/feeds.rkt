@@ -89,9 +89,7 @@
   (define info (current-site-info))
   (unless info
     (error 'get-feed-content "no site-info available"))
-  (define pages (site-info-pages info))
-  (define matching-page
-    (findf (lambda (p) (equal? (page-slug p) slug)) pages))
+  (define matching-page (hash-ref (site-info-page-by-slug info) slug #f))
   (if matching-page
       (render-fn (page-doc matching-page))
       '(p "Content unavailable")))

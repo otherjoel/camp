@@ -48,7 +48,11 @@
 
 (struct page (source-path output-path doc slug collection-name) #:transparent)
 (struct page-link (url title metas) #:transparent)
-(struct site-info (pages term-index page-index taxonomy-index) #:transparent)
+(struct site-info (pages term-index page-index taxonomy-index
+                   pages-by-collection       ; collection-name → (listof page?)
+                   page-links-by-collection  ; collection-name → (listof page-link?)
+                   page-by-slug)             ; slug → page?
+  #:transparent)
 
 ;; ---------------------------------------------------------------------------
 ;; Render context

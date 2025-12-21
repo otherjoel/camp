@@ -43,7 +43,25 @@
   (define term-index (build-term-index all-pages))
   (define taxonomy-index (build-taxonomy-index all-pages collections))
 
-  (site-info all-pages term-index page-index taxonomy-index))
+  (define pages-by-collection
+    (let ([grouped (for/fold ([h (hash)])
+                             ([p (in-list all-pages)])
+                     (hash-update h (page-collection-name p)
+                                  (λ (lst) (cons p lst)) '()))])
+      ;; Reverse to maintain sort order (pages were consed in reverse)
+      (for/hash ([(k v) (in-hash grouped)])
+        (values k (reverse v)))))
+
+  (define page-links-by-collection
+    (for/hash ([(coll-name pages) (in-hash pages-by-collection)])
+      (values coll-name (map page->page-link pages))))
+
+  (define page-by-slug
+    (for/hash ([p (in-list all-pages)])
+      (values (page-slug p) p)))
+
+  (site-info all-pages term-index page-index taxonomy-index
+             pages-by-collection page-links-by-collection page-by-slug))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Path Helpers
@@ -308,6 +326,7 @@
     (define page-index (site-info-page-index info))
     (define taxonomy-index (site-info-taxonomy-index info))
     (define pages (site-info-pages info))
+    (define page-links-by-coll (site-info-page-links-by-collection info))
 
     (copy-static-files static-dir output-dir)
     (when (directory-exists? static-dir)
@@ -322,7 +341,7 @@
       (define coll (hash-ref coll-by-name coll-name))
       (define render-fn (resolve-render-function coll site))
       (define body (render-page-body (page-doc p) term-index page-index element-fallback))
-      (define ctx (build-context p body coll-name taxonomy-index pages))
+      (define ctx (build-context p body coll-name taxonomy-index page-links-by-coll))
       (define html-xexpr (render-fn (page-doc p) ctx))
       (define output-path (build-path output-dir (page-output-path p)))
       (make-parent-directory* output-path)
@@ -375,12 +394,10 @@
 ;; ---------------------------------------------------------------------------
 ;; Context Building
 
-(define (build-context p body coll-name taxonomy-index all-pages)
+(define (build-context p body coll-name taxonomy-index page-links-by-coll)
   (define slug (page-slug p))
   (define doc (page-doc p))
-  (define coll-pages
-    (map page->page-link
-         (filter (λ (pg) (equal? (page-collection-name pg) coll-name)) all-pages)))
+  (define coll-pages (hash-ref page-links-by-coll coll-name '()))
   (define page-taxonomies (build-page-taxonomies doc taxonomy-index coll-name))
   (define prev-proc (make-nav-proc prev-in slug coll-name coll-pages page-taxonomies taxonomy-index))
   (define next-proc (make-nav-proc next-in slug coll-name coll-pages page-taxonomies taxonomy-index))
