@@ -8,6 +8,7 @@ authors = ["Test Author (test@example.com)"]
 sources = ".md.rkt"
 static-folder = "static"
 output-folder = "publish"
+deploy-script = "./deploy.sh"
 
 # Use render module from fixtures directory
 default-render = '(camp/tests/fixtures/render render-page)'

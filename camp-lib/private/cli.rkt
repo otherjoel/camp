@@ -11,6 +11,7 @@
          racket/path
          racket/rerequire
          racket/string
+         racket/system
          racket/vector
          "main.rkt"
          "build.rkt"
@@ -38,7 +39,7 @@
      (match cmd
        ["build" (run-build cmd-args)]
        ["serve" (run-serve cmd-args)]
-       ["deploy" (not-implemented "deploy")]
+       ["deploy" (run-deploy cmd-args)]
        ["new" (not-implemented "new")]
        ["help" (show-usage)]
        [_ (eprintf "Unknown command: ~a\n" cmd)
@@ -397,6 +398,71 @@
 
   (with-handlers ([exn:break? (λ (e) (cleanup!))])
     (sync never-evt)))
+
+;; ---------------------------------------------------------------------------
+;; Deploy command
+
+(define (run-deploy args)
+  (define remaining
+    (command-line
+     #:program "raco camp deploy"
+     #:argv args
+     #:args ([path #f])
+     path))
+
+  (define resolved-path
+    (cond
+      [remaining remaining]
+      [(file-exists? "site.rkt") "site.rkt"]
+      [else
+       (eprintf "Error: No site.rkt found in current directory.\n")
+       (eprintf "Specify a path: raco camp deploy <site-path>\n")
+       (exit 1)]))
+
+  (define site
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (eprintf "Error loading site: ~a\n" (exn-message e))
+                       (exit 1))])
+      (load-site resolved-path)))
+
+  (define deploy-script (site-deploy-script site))
+
+  (unless deploy-script
+    (eprintf "Error: No deploy-script configured in site configuration.\n")
+    (eprintf "Add deploy-script = \"./deploy.sh\" to your site.rkt\n")
+    (exit 1))
+
+  (define root (site-root site))
+  (define script-path (simplify-path (build-path root deploy-script)))
+
+  (unless (file-exists? script-path)
+    (eprintf "Error: Deploy script not found: ~a\n" script-path)
+    (exit 1))
+
+  (define output-dir
+    (path->string (simplify-path (build-path root (site-output-folder site)))))
+
+  (displayln "")
+  (displayln (bold "camp deploy"))
+  (displayln "")
+  (displayln (~a "  " (dim "Running") " " deploy-script " " output-dir))
+  (displayln "")
+
+  (define exit-code
+    (parameterize ([current-directory root])
+      (apply system*/exit-code script-path (list output-dir))))
+
+  (displayln "")
+  (if (zero? exit-code)
+      (displayln (~a "  " (green "✓") " " (bold "Deploy complete")))
+      (displayln (~a "  " (red "✗") " " (bold "Deploy failed") " (exit code " exit-code ")")))
+  (displayln "")
+
+  (exit exit-code))
+
+;; ---------------------------------------------------------------------------
+;; Serve log formatting
 
 (define (colorize-modern-log msg)
   (define parts (string-split msg " "))
