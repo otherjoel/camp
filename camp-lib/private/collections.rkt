@@ -2,6 +2,7 @@
 
 (require racket/file
          racket/list
+         racket/match
          racket/path
          racket/string
          punct/fetch
@@ -96,8 +97,7 @@
 
   (define pages-with-sort-vals
     (for/list ([page (in-list pages)])
-      (define doc (caddr page))
-      (define slug (cadr page))
+      (match-define (list _ slug doc) page)
       (define raw-val (meta-ref doc (string->symbol sort-key)))
       (unless raw-val
         (error 'sort-pages

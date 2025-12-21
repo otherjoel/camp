@@ -108,7 +108,7 @@
   (define filename (feed-config-filename feed-cfg))
   (define coll-names (feed-config-collections feed-cfg))
   (define render-spec (feed-config-render-with feed-cfg))
-  (define render-fn (resolve-module-binding render-spec))
+  (define render-fn (apply dynamic-require render-spec))
 
   (define feed-format
     (cond
@@ -135,10 +135,6 @@
 
   (express-xml the-feed feed-format feed-url))
 
-(define (resolve-module-binding spec)
-  (define mod-path (car spec))
-  (define binding (cadr spec))
-  (dynamic-require mod-path binding))
 
 ;; ---------------------------------------------------------------------------
 ;; Build Integration

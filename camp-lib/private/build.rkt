@@ -95,9 +95,7 @@
   (define sorted-pages (sort-pages raw-pages coll))
 
   (for/list ([raw-page (in-list sorted-pages)])
-    (define source-path (first raw-page))
-    (define slug (second raw-page))
-    (define doc (third raw-page))
+    (match-define (list source-path slug doc) raw-page)
     (define date-val (get-page-date doc))
     (define output-path
       (let ([override (meta-ref doc 'output-path)])
@@ -129,10 +127,7 @@
 (define (output-path->url output-path)
   (define path-str (path->string output-path))
   (define normalized (string-replace path-str "\\" "/"))
-  (define clean
-    (if (string-suffix? normalized "/index.html")
-        (substring normalized 0 (- (string-length normalized) 10))
-        normalized))
+  (define clean (regexp-replace #rx"index\\.html$" normalized ""))
   (if (string-prefix? clean "/")
       clean
       (string-append "/" clean)))
@@ -363,16 +358,12 @@
   (unless render-spec
     (error 'build! "no render function for collection ~a and no site default"
            (collection-name coll)))
-  (resolve-module-binding render-spec))
+  (apply dynamic-require render-spec))
 
 (define (resolve-element-fallback site)
   (define spec (site-element-fallback site))
-  (and spec (resolve-module-binding spec)))
+  (and spec (apply dynamic-require spec)))
 
-(define (resolve-module-binding spec)
-  (define mod-path (car spec))
-  (define binding (cadr spec))
-  (dynamic-require mod-path binding))
 
 ;; ---------------------------------------------------------------------------
 ;; Body Rendering
