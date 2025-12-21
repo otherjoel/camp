@@ -12,4 +12,5 @@ publish/
 *.html
 *.js
 *.css
+!camp-demo/static/*.css
 *.txt

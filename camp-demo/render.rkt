@@ -47,7 +47,7 @@
     [(camp-page-doc? doc)
      (layout title `((article ,@body)))]
 
-    ;; Punct documents: add title and any special content
+    ;; Punct documents: add title and wrap body in .content
     [else
      ;; Special handling for home page: show recent posts
      (define extra-content
@@ -64,7 +64,8 @@
      (layout title
              `((article
                 (h1 ,title)
-                ,@body
+                (div ((class "content"))
+                     ,@body)
                 ,@extra-content)))]))
 
 ;; Render function for blog posts
@@ -106,13 +107,13 @@
                      (if p
                          `(a ((href ,(page-link-url p))
                               (rel "prev"))
-                             "← " ,(page-link-title p))
+                             ,(page-link-title p))
                          ""))
                   ,(let ([n (next)])
                      (if n
                          `(a ((href ,(page-link-url n))
                               (rel "next"))
-                             ,(page-link-title n) " →")
+                             ,(page-link-title n))
                          "")))))))
 
 ;; Date formatting helper
