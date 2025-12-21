@@ -118,15 +118,88 @@
       "E0LTIuOTE0LS4wMTMtLjAxMVoiPjwvcGF0aD48L3N2Zz4="))
 
 (define css
-  (~a "body { font-family: ui-monospace, monospace; }\n"
-      "ul { line-height: 1.4; list-style-type: none; }\n"
-      "li a {\n"
-      "  padding-left: 20px;\n"
-      "  text-decoration: none;\n"
-      "  background-image: url(\"" file-icon "\");\n"
-      "  background-repeat: no-repeat;\n"
-      "  background-position: 0px center; }\n"
-      "li.folder a { background-image: url(\"" folder-icon "\"); }\n"))
+  (~a
+   ;; Base styles
+   "*, *::before, *::after { box-sizing: border-box; }\n"
+   "body {\n"
+   "  font-family: ui-rounded, 'Hiragino Maru Gothic ProN', Quicksand, Comfortaa, "
+   "Manjari, 'Arial Rounded MT', 'Arial Rounded MT Bold', Calibri, source-sans-pro, sans-serif;\n"
+   "  margin: 0; padding: 24px 32px;\n"
+   "  background: linear-gradient(135deg, #f8f6f3 0%, #f0ede8 100%);\n"
+   "  min-height: 100vh;\n"
+   "  color: #3d3832;\n"
+   "  line-height: 1.5;\n"
+   "}\n"
+   ;; Container
+   ".container { max-width: 720px; margin: 0 auto; }\n"
+   ;; Header
+   "h1 {\n"
+   "  font-size: 1.25rem; font-weight: 600;\n"
+   "  color: #2d5a45; margin: 0 0 16px 0;\n"
+   "  display: flex; align-items: center; gap: 8px;\n"
+   "}\n"
+   "h1::before {\n"
+   "  content: ''; display: inline-block;\n"
+   "  width: 6px; height: 6px;\n"
+   "  background: #5a8f6e; border-radius: 50%;\n"
+   "}\n"
+   ;; File list
+   "ul {\n"
+   "  list-style: none; margin: 0; padding: 0;\n"
+   "  background: #fff; border-radius: 8px;\n"
+   "  box-shadow: 0 1px 3px rgba(45,50,55,0.06), 0 1px 2px rgba(45,50,55,0.04);\n"
+   "  overflow: hidden;\n"
+   "}\n"
+   "li { border-bottom: 1px solid #edeae5; }\n"
+   "li:last-child { border-bottom: none; }\n"
+   "li a {\n"
+   "  display: flex; align-items: center; gap: 10px;\n"
+   "  padding: 10px 14px;\n"
+   "  text-decoration: none; color: #3d3832;\n"
+   "  transition: background 0.15s ease;\n"
+   "}\n"
+   "li a:hover { background: #f8f6f3; }\n"
+   "li a::before {\n"
+   "  content: ''; flex-shrink: 0;\n"
+   "  width: 16px; height: 16px;\n"
+   "  background-image: url(\"" file-icon "\");\n"
+   "  background-size: contain;\n"
+   "  background-repeat: no-repeat;\n"
+   "  opacity: 0.7;\n"
+   "}\n"
+   "li.folder a::before { background-image: url(\"" folder-icon "\"); opacity: 1; }\n"
+   "li.folder a { color: #2d5a45; font-weight: 500; }\n"
+   ;; Error page styles
+   ".error-page {\n"
+   "  text-align: center; padding: 48px 24px;\n"
+   "}\n"
+   ".error-code {\n"
+   "  font-size: 4rem; font-weight: 700;\n"
+   "  color: #c9a86c; margin: 0; line-height: 1;\n"
+   "}\n"
+   ".error-title {\n"
+   "  font-size: 1.25rem; font-weight: 600;\n"
+   "  color: #2d5a45; margin: 12px 0 8px 0;\n"
+   "}\n"
+   ".error-message {\n"
+   "  color: #6b635a; margin: 0;\n"
+   "  font-size: 0.95rem;\n"
+   "}\n"
+   ".error-hint {\n"
+   "  margin-top: 24px; padding-top: 20px;\n"
+   "  border-top: 1px solid #edeae5;\n"
+   "  font-size: 0.85rem; color: #8a837a;\n"
+   "}\n"
+   ".error-hint a {\n"
+   "  color: #5a8f6e; text-decoration: none;\n"
+   "  font-weight: 500;\n"
+   "}\n"
+   ".error-hint a:hover { text-decoration: underline; }\n"
+   "code {\n"
+   "  font-family: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;\n"
+   "  background: #f0ede8; padding: 2px 6px;\n"
+   "  border-radius: 4px; font-size: 0.9em;\n"
+   "}\n"))
 
 (define root-url
   (url #f #f #f #f #t null null #f))
@@ -158,15 +231,18 @@
       (if (directory-exists? f) "folder" "file"))
     (make-file-link class u name)))
 
-(define (make-template-xexpr title-string body)
+(define (make-template-xexpr title-string body #:error? [error? #f])
   `(html
     (head
+     (meta [[charset "utf-8"]])
+     (meta [[name "viewport"] [content "width=device-width, initial-scale=1"]])
      (title ,title-string)
      (style ,css))
     (body
-     (h1 ,title-string)
-     (hr)
-     ,body)))
+     (div [[class "container"]]
+          ,@(if error?
+                (list body)
+                (list `(h1 ,title-string) body))))))
 
 (define (directory-lister:make #:url->path url->path)
   (lift:make
@@ -202,12 +278,20 @@
 ;; 404 Not Found handler
 
 (define (not-found req)
+  (define path (url->string (request-uri req)))
   (response/html5-xexpr
    #:code 404
    #:message #"Not Found"
-   (make-template-xexpr "Error response"
-                        '(div (p "Error code: 404")
-                              (p "Message: File not found.")))))
+   (make-template-xexpr
+    "Page Not Found"
+    #:error? #t
+    `(div [[class "error-page"]]
+          (p [[class "error-code"]] "404")
+          (p [[class "error-title"]] "Page not found")
+          (p [[class "error-message"]]
+             "The path " (code ,path) " doesn't exist.")
+          (p [[class "error-hint"]]
+             "Check the URL or " (a [[href "/"]] "return home") ".")))))
 
 ;; ============================================================================
 ;; Main entry point
