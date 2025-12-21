@@ -104,6 +104,13 @@ Collected information about a site, built during the collect pass. Contains all 
 an index mapping term names to URLs, an index mapping slugs to page-links, and a nested index for
 taxonomy lookups.}
 
+@subsection{Site Information Parameter}
+
+@defparam[current-site-info info (or/c site-info? #f)]{
+A parameter containing the current @racket[site-info] during the build phase. Set by @racket[build!]
+before rendering pages. Used internally by @racket[get-collection], @racket[get-taxonomy-terms],
+and @racket[get-taxonomy-pages]. Returns @racket[#f] outside of a build context.}
+
 @subsection{Context}
 
 The render context is passed to render functions and provides pre-rendered content along with
@@ -449,11 +456,18 @@ The @racketmodname[camp/serve] module provides a development server for local te
 
 @defproc[(start-server [output-folder path-string?]
                        [#:port port exact-nonnegative-integer? 8000]
-                       [#:watch? watch? boolean? #t])
-         void?]{
-Starts a development server serving files from @racket[_output-folder]. By default, listens on port
-8000 and watches for file changes, triggering rebuilds automatically. Set @racket[_watch?] to
-@racket[#f] to disable file watching.}
+                       [#:watch? watch? boolean? #t]
+                       [#:log-format log-format (or/c 'modern 'apache) 'modern])
+         (-> void?)]{
+Starts a development server serving files from @racket[_output-folder]. Returns a shutdown procedure
+that stops the server when called.
+
+By default, listens on port 8000 and watches for file changes, triggering rebuilds automatically.
+Set @racket[_watch?] to @racket[#f] to disable file watching.
+
+The @racket[_log-format] parameter controls request logging: @racket['modern] produces a clean
+@tt{HH:MM:SS METHOD PATH STATUS} format suitable for colorized terminal output, while
+@racket['apache] produces traditional Apache combined log format.}
 
 @; =============================================================================
 @section[#:tag "mod-log"]{Logging}
