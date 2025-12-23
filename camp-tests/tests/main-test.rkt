@@ -168,3 +168,17 @@
 (check-equal? (next-in test-pages "a") (cadr test-pages))
 (check-equal? (next-in test-pages "b") (caddr test-pages))
 (check-false (next-in test-pages "c"))
+
+;; ---------------------------------------------------------------------------
+;; ~d date formatting with auto-conversion (pattern first, like format)
+
+(define test-date (date 2025 1 15))
+
+;; Works with ISO 8601 strings (common from Punct metas)
+(check-equal? (~d "d MMM yyyy" "2025-01-15") "15 Jan 2025")
+(check-equal? (~d "yyyy-MM-dd" "2025-01-15") "2025-01-15")
+(check-equal? (~d "MMMM d, yyyy" "2025-01-15") "January 15, 2025")
+
+;; Also works with gregor date objects
+(check-equal? (~d "d MMM yyyy" test-date) "15 Jan 2025")
+(check-equal? (~d "EEE, MMM d" (date 2024 12 25)) "Wed, Dec 25")

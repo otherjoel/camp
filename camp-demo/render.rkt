@@ -83,7 +83,7 @@
              (header
               (h1 ,title)
               ,(if date
-                   `(time ((datetime ,(~a date))) ,(format-date date))
+                   `(time ((datetime ,(~d "yyyy-MM-dd" date))) ,(~d "d MMM yyyy" date))
                    "")
               ,(if (null? tags)
                    ""
@@ -116,10 +116,3 @@
                              ,(page-link-title n))
                          "")))))))
 
-;; Date formatting helper
-(define (format-date d)
-  ;; Assuming gregor date object
-  (~a d))
-
-(define (~a x)
-  (format "~a" x))

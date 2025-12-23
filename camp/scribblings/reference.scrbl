@@ -6,7 +6,7 @@
                      camp/build
                      camp/serve
                      camp/log
-                     (except-in gregor date date?)
+                     (only-in gregor date-provider? ~t)
                      punct/doc
                      racket/base
                      racket/contract))
@@ -169,6 +169,53 @@ there is no previous page.}
          (or/c page-link? #f)]{
 Finds the next page in an ordered list, given the current page's slug. Returns @racket[#f] if there
 is no next page.}
+
+@subsection{Date Formatting}
+
+@defproc[(~t [t date-provider?] [pattern string?]) string?]{
+Formats a date using CLDR (Unicode Common Locale Data Repository) patterns. This function is
+re-exported from the @racketmodname[gregor] library.
+
+Common pattern elements:
+@tabular[#:sep @hspace[2]
+         (list (list @bold{Pattern} @bold{Output} @bold{Example})
+               (list @tt{yyyy} "4-digit year" "2025")
+               (list @tt{yy} "2-digit year" "25")
+               (list @tt{MMMM} "Full month name" "January")
+               (list @tt{MMM} "Abbreviated month" "Jan")
+               (list @tt{MM} "2-digit month" "01")
+               (list @tt{M} "1 or 2-digit month" "1")
+               (list @tt{dd} "2-digit day" "05")
+               (list @tt{d} "1 or 2-digit day" "5")
+               (list @tt{EEEE} "Full weekday name" "Wednesday")
+               (list @tt{EEE} "Abbreviated weekday" "Wed"))]
+
+Patterns can be combined with literal text:
+@codeblock|{
+(~t my-date "MMMM d, yyyy")    ; "January 15, 2025"
+(~t my-date "d MMM yyyy")      ; "15 Jan 2025"
+(~t my-date "yyyy-MM-dd")      ; "2025-01-15"
+(~t my-date "EEE, MMM d")      ; "Wed, Jan 15"
+}|
+
+See the @hyperlink["http://unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table"]{CLDR
+documentation} for the complete list of pattern symbols.}
+
+@defproc[(~d [pattern string?] [v (or/c string? date-provider?)]) string?]{
+Formats a date using CLDR patterns, automatically converting ISO 8601 date strings. This is the
+recommended function for formatting dates from page metadata, since Punct documents provide dates
+as strings. The pattern comes first, matching Racket's @racket[format] convention.
+
+@codeblock|{
+;; In a render function:
+(define date (meta-ref doc 'date))  ; might be "2025-01-15" or a date object
+
+(~d "d MMM yyyy" date)      ; "15 Jan 2025" - works either way
+(~d "yyyy-MM-dd" date)      ; "2025-01-15" - for datetime attributes
+}|
+
+If @racket[_v] is already a @racket[date-provider?], it is passed directly to @racket[~t]. If
+@racket[_v] is a string, it is first parsed as an ISO 8601 date.}
 
 @; =============================================================================
 @section[#:tag "mod-site"]{Site Configuration Language}

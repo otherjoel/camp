@@ -2,6 +2,7 @@
 
 (require racket/contract
          hash-view
+         gregor
          "private/structs.rkt"
          "private/main.rkt")
 
@@ -15,7 +16,11 @@
  (struct-out site-info)
  current-site-info)
 
+(define (~d pattern v)
+  (~t (if (string? v) (iso8601->date v) v) pattern))
+
 (provide/contract
+ [~d (-> string? (or/c string? date-provider?) string?)]
  [load-site (-> (or/c path-string? module-path?) site?)]
  [get-collection (->* (string?)
                       (#:limit (or/c #f exact-positive-integer?)
