@@ -19,7 +19,8 @@
          "watch.rkt"
          "structs.rkt"
          "output.rkt"
-         "log.rkt")
+         "log.rkt"
+         "new-site.rkt")
 
 (provide main)
 
@@ -40,15 +41,11 @@
        ["build" (run-build cmd-args)]
        ["serve" (run-serve cmd-args)]
        ["deploy" (run-deploy cmd-args)]
-       ["new" (not-implemented "new")]
+       ["new" (run-new cmd-args)]
        ["help" (show-usage)]
        [_ (eprintf "Unknown command: ~a\n" cmd)
           (show-usage)
           (exit 1)])]))
-
-(define (not-implemented cmd)
-  (eprintf "Command '~a' is not yet implemented.\n" cmd)
-  (exit 1))
 
 (define (show-usage)
   (displayln "Usage: raco camp <command> [options]")
@@ -62,8 +59,8 @@
   (displayln "    --port N                    Port number (default: 8000)")
   (displayln "    --no-watch                  Disable file watching")
   (displayln "    --apache-log                Use Apache combined log format")
-  (displayln "  deploy                        Run deploy script (not yet implemented)")
-  (displayln "  new <name>                    Create new site (not yet implemented)")
+  (displayln "  deploy [site-path]            Run deploy script")
+  (displayln "  new <name>                    Create new site from template")
   (displayln "  help                          Show this help")
   (displayln "")
   (displayln "If site-path is not specified, looks for site.rkt in current directory."))
@@ -460,6 +457,51 @@
   (displayln "")
 
   (exit exit-code))
+
+;; ---------------------------------------------------------------------------
+;; New command
+
+(define (run-new args)
+  (define name
+    (command-line
+     #:program "raco camp new"
+     #:argv args
+     #:args (name)
+     name))
+
+  ;; Validate name is a valid Racket identifier (roughly)
+  (unless (regexp-match? #rx"^[a-z][a-z0-9-]*$" name)
+    (eprintf "Error: Invalid site name '~a'\n" name)
+    (eprintf "Name must start with a letter and contain only lowercase letters, numbers, and hyphens.\n")
+    (exit 1))
+
+  (define target-dir (build-path (current-directory) name))
+
+  ;; Check if directory already exists
+  (when (or (directory-exists? target-dir)
+            (file-exists? target-dir))
+    (eprintf "Error: '~a' already exists.\n" name)
+    (eprintf "Choose a different name or remove the existing directory.\n")
+    (exit 1))
+
+  (displayln "")
+  (displayln (bold "camp new"))
+  (displayln "")
+
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (eprintf "  ~a Error: ~a\n" (red "✗") (exn-message e))
+                     (exit 1))])
+    (create-new-site target-dir name))
+
+  (displayln (~a "  " (green "✓") " Created " (bold name)))
+  (displayln "")
+  (displayln (~a "  " (dim "Next steps:")))
+  (displayln (~a "    cd " name))
+  (displayln "    raco pkg install")
+  (displayln "    raco camp build")
+  (displayln "    raco camp serve")
+  (displayln ""))
 
 ;; ---------------------------------------------------------------------------
 ;; Serve log formatting

@@ -1,0 +1,8 @@
+#lang punct
+
+---
+title: Home
+output-path: /
+---
+
+Welcome to your new Camp site.

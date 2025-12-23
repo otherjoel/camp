@@ -1,0 +1,9 @@
+#lang info
+
+(define collection "@name")
+(define camp-site "site.rkt")
+
+(define deps '("base"
+               "camp-lib"
+               "punct-lib"
+               "html-printer"))

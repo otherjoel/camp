@@ -1,0 +1,8 @@
+#lang punct
+
+---
+title: My First Post
+date: @founded
+---
+
+This is my first blog post. Welcome to my new site!

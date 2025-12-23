@@ -1,0 +1,26 @@
+#lang camp/site
+
+title = "@title"
+url = "https://example.com"
+founded = @founded
+authors = ["@author"]
+
+[[collections]]
+name = "blog"
+source = "blog/*"
+output-paths = "blog/[yyyy]/[MM]/*/"
+render-with = "(@|name|/render render-post)"
+order = "descending"
+sort-key = "date"
+
+[[collections]]
+name = "pages"
+source = "pages/*"
+output-paths = "*/"
+render-with = "(@|name|/render render-page)"
+sort-key = "title"
+
+[[feeds]]
+filename = "feed.atom"
+collections = ["blog"]
+render-with = "(@|name|/feeds feed-content)"

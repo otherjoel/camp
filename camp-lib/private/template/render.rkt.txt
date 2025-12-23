@@ -1,0 +1,63 @@
+#lang racket/base
+
+(require camp
+         punct/fetch)
+
+(provide render-page
+         render-post)
+
+(define (layout title body-content)
+  `(html
+    (head
+     (meta ((charset "utf-8")))
+     (meta ((name "viewport") (content "width=device-width, initial-scale=1")))
+     (title ,title)
+     (link ((rel "stylesheet") (href "/style.css")))
+     (link ((rel "alternate") (type "application/atom+xml") (href "/feed.atom"))))
+    (body
+     (div ((class "paper"))
+      (header
+       (nav (a ((href "/")) "Home") " · " (a ((href "/feed.atom")) "Feed")))
+      (main ,@"@"body-content)
+      (footer (p "Powered by Camp"))))))
+
+(define (render-page doc context)
+  (define title (or (meta-ref doc 'title) "Untitled"))
+  (define body (hash-ref context 'body))
+  (define slug (hash-ref context 'slug))
+
+  ;; On the home page, show recent blog posts
+  (define blog-listing
+    (if (equal? slug "index")
+        (let ([posts (get-collection "blog")])
+          `((section ((class "posts"))
+             (h2 "Recent Posts")
+             (ul
+              ,@"@"(for/list ([p posts])
+                    `(li
+                      (a ((href ,(page-link-url p)))
+                         ,(page-link-title p))
+                      ,(let ([date (hash-ref (page-link-metas p) 'date #f)])
+                         (if date
+                             `(span ((class "date")) " · " ,(~d "d MMM yyyy" date))
+                             ""))))))))
+        '()))
+
+  (layout title `((article (h1 ,title) ,@"@"body ,@"@"blog-listing))))
+
+(define (render-post doc context)
+  (define title (or (meta-ref doc 'title) "Untitled"))
+  (define date (meta-ref doc 'date))
+  (define body (hash-ref context 'body))
+  (define prev (hash-ref context 'prev))
+  (define next (hash-ref context 'next))
+  (layout title
+          `((article ((class "post"))
+             (h1 ,title)
+             ,(if date `(time ((datetime ,(~d "yyyy-MM-dd" date))) ,(~d "d MMM yyyy" date)) "")
+             ,@"@"body
+             (nav ((class "pagination"))
+                  ,(let ([p (prev)])
+                     (if p `(a ((href ,(page-link-url p))) "← " ,(page-link-title p)) ""))
+                  ,(let ([n (next)])
+                     (if n `(a ((href ,(page-link-url n))) ,(page-link-title n) " →") "")))))))

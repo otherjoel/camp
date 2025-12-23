@@ -1,0 +1,8 @@
+#lang punct
+
+---
+title: Welcome
+date: @earlier-date
+---
+
+Welcome to my new blog! I'm excited to start sharing my thoughts here.

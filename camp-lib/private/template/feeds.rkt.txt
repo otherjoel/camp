@@ -1,0 +1,8 @@
+#lang racket/base
+
+(require punct/doc)
+
+(provide feed-content)
+
+(define (feed-content doc)
+  `(article ,@"@"(document-body doc)))
