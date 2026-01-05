@@ -79,23 +79,23 @@
 (define test-prev (λ () #f))
 (define test-next (λ () #f))
 (define test-context
-  (context '((p "Hello"))
-           "my-post"
+  (context "my-post"
+           "/blog/2024/01/my-post/"
            "blog"
            test-prev
            test-next
            (hasheq "tags" '("emacs" "racket"))))
 
 (check-true (context? test-context))
-(check-equal? (context-body test-context) '((p "Hello")))
 (check-equal? (context-slug test-context) "my-post")
+(check-equal? (context-url test-context) "/blog/2024/01/my-post/")
 (check-equal? (context-collection test-context) "blog")
 (check-equal? (context-prev test-context) test-prev)
 (check-equal? (context-next test-context) test-next)
 (check-equal? (hash-ref (context-taxonomies test-context) "tags") '("emacs" "racket"))
 
 (check-equal? (hash-ref test-context 'slug) "my-post")
-(check-equal? (hash-ref test-context 'body) '((p "Hello")))
+(check-equal? (hash-ref test-context 'url) "/blog/2024/01/my-post/")
 
 ;; ---------------------------------------------------------------------------
 ;; load-site tests

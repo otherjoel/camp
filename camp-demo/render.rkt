@@ -4,10 +4,12 @@
          camp/page
          punct/doc
          punct/fetch
-         racket/list)
+         racket/list
+         racket/string)
 
 (provide render-page
-         render-post)
+         render-post
+         render-book)
 
 ;; Shared page layout
 (define (layout title body-content)
@@ -38,7 +40,7 @@
 ;; Handles both Punct documents and #lang camp/page documents
 (define (render-page doc context)
   (define title (or (meta-ref doc 'title) "Untitled"))
-  (define body (hash-ref context 'body))
+  (define body (camp-doc->html-xexpr doc))
   (define slug (hash-ref context 'slug))
 
   (cond
@@ -72,7 +74,7 @@
 (define (render-post doc context)
   (define title (or (meta-ref doc 'title) "Untitled"))
   (define date (meta-ref doc 'date))
-  (define body (hash-ref context 'body))
+  (define body (camp-doc->html-xexpr doc))
   (define tags (hash-ref (hash-ref context 'taxonomies) "tags" '()))
   (define series (hash-ref (hash-ref context 'taxonomies) "series" '()))
   (define prev (hash-ref context 'prev))
@@ -115,4 +117,51 @@
                               (rel "next"))
                              ,(page-link-title n))
                          "")))))))
+
+;; ---------------------------------------------------------------------------
+;; Book Rendering
+
+(define (render-book parts)
+  (string-append
+   ;; Preamble: import template and apply with metadata
+   #<<TYPST
+#import "template.typ": book, term, term_definition
+
+#show: book.with(
+  title: "The River City Reader",
+  subtitle: "Collected Writings, Summer 1912",
+  authors: ("Marian Paroo",),
+  publisher: "River City Library Press",
+  year: 1912,
+  dedication: "For the children of River City.",
+  copyright-notice: "Public Domain",
+  copyright-legal: "These writings may be freely reproduced.",
+)
+
+TYPST
+   ;; Render each part
+   (string-append*
+    (for/list ([part (in-list parts)])
+      (render-book-part part)))))
+
+(define (render-book-part part)
+  (define name (hash-ref part 'name))
+  (define chapters (hash-ref part 'chapters))
+  (string-append
+   (format "= ~a\n\n" (escape-typst name))
+   (string-append*
+    (for/list ([ch (in-list chapters)])
+      (render-book-chapter ch)))))
+
+(define (render-book-chapter ch)
+  (define slug (hash-ref ch 'slug))
+  (define doc (hash-ref ch 'doc))
+  (define title (or (meta-ref doc 'title) slug))
+  (string-append
+   (format "== ~a <~a>\n\n" (escape-typst title) slug)
+   (camp-doc->typst doc)
+   "\n\n"))
+
+(define (escape-typst s)
+  (regexp-replace* #rx"[#*_@$\\\\]" s "\\\\&"))
 

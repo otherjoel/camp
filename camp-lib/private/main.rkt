@@ -6,11 +6,17 @@
          racket/string
          racket/rerequire
          syntax/modresolve
+         pkg/path
+         setup/getinfo
          punct/doc
          punct/fetch
-         "structs.rkt")
+         "structs.rkt"
+         "filter.rkt"
+         "xref.rkt")
 
-(provide load-site
+(provide file-path->site-path
+         load-site
+         filter-pages
          current-site-info
          get-collection
          get-taxonomy-terms
@@ -24,11 +30,46 @@
 (define current-site-info (make-parameter #f))
 
 ;; ---------------------------------------------------------------------------
+;; Package Info Helpers
+
+(define (file-path->site-path file-path)
+  (define abs-path (simplify-path (path->complete-path file-path)))
+  (define-values (pkg-name subpath) (path->pkg+subpath abs-path))
+  (unless pkg-name
+    (error 'file-path->site-path
+           "file is not in a package: ~a" abs-path))
+  ;; Compute package root by stripping subpath from abs-path
+  (define pkg-root
+    (cond
+      [(eq? subpath 'same) abs-path]
+      [(path? subpath)
+       (define subpath-parts (explode-path subpath))
+       (for/fold ([p abs-path]) ([_ (in-list subpath-parts)])
+         (simplify-path (build-path p 'up)))]
+      [else (error 'file-path->site-path
+                   "unexpected subpath value: ~a" subpath)]))
+  ;; Get info procedure for this package
+  (define get-pkg-info (get-info/full pkg-root))
+  (unless get-pkg-info
+    (error 'file-path->site-path
+           "no info.rkt found in package root: ~a" pkg-root))
+  ;; Look up camp-site field
+  (define site-mod-path (get-pkg-info 'camp-site (λ () #f)))
+  (unless site-mod-path
+    (error 'file-path->site-path
+           "info.rkt does not define 'camp-site: ~a" pkg-root))
+  ;; Resolve the module path relative to the package root
+  (simplify-path (build-path pkg-root site-mod-path)))
+
+;; ---------------------------------------------------------------------------
 ;; Site Loading
 
 (define (load-site mod-path)
   (define resolved
     (cond
+      ;; Hash with 'path key (e.g., a book config) - discover site from package
+      [(and (hash? mod-path) (hash-has-key? mod-path 'path))
+       (file-path->site-path (hash-ref mod-path 'path))]
       [(and (path-string? mod-path) (absolute-path? mod-path))
        (if (path? mod-path) mod-path (string->path mod-path))]
       [(path-string? mod-path)
@@ -120,14 +161,6 @@
       (hash-ref term-hash term '())
       term-hash))
 
-(define (normalize-taxonomy-value val)
-  (cond
-    [(not val) '()]
-    [(string? val)
-     (map string-trim (string-split val ","))]
-    [(list? val)
-     (map (λ (v) (if (symbol? v) (symbol->string v) (~a v))) val)]
-    [else '()]))
 
 ;; ---------------------------------------------------------------------------
 ;; Page Navigation
@@ -136,16 +169,18 @@
   (hash-ref (page-link-metas pl) 'slug))
 
 (define (prev-in pages current-slug)
+  (define normalized-current (normalize-slug current-slug))
   (let loop ([pages pages] [prev #f])
     (cond
       [(null? pages) #f]
-      [(equal? (page-link-slug (car pages)) current-slug) prev]
+      [(equal? (normalize-slug (page-link-slug (car pages))) normalized-current) prev]
       [else (loop (cdr pages) (car pages))])))
 
 (define (next-in pages current-slug)
+  (define normalized-current (normalize-slug current-slug))
   (let loop ([pages pages])
     (cond
       [(null? pages) #f]
       [(null? (cdr pages)) #f]
-      [(equal? (page-link-slug (car pages)) current-slug) (cadr pages)]
+      [(equal? (normalize-slug (page-link-slug (car pages))) normalized-current) (cadr pages)]
       [else (loop (cdr pages))])))

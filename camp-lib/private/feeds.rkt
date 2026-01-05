@@ -9,8 +9,6 @@
          racket/file
          gregor
          splitflap
-         punct/doc
-         punct/fetch
          "structs.rkt"
          "main.rkt"
          "log.rkt")
@@ -54,7 +52,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Feed Item Conversion
 
-(define (page-link->feed-item pl feed-tag-uri site-url author render-fn)
+(define (page-link->feed-item pl feed-tag-uri site-url author render-fn contexts-by-slug)
   (define metas (page-link-metas pl))
   (define slug (hash-ref metas 'slug))
   (define title (page-link-title pl))
@@ -68,7 +66,7 @@
   (define absolute-url (url-join site-url relative-for-join))
   (define item-tag-uri (append-specific feed-tag-uri (normalize-tag-specific slug)))
   (define pub-moment (date-string->moment date-val))
-  (define content (get-feed-content slug render-fn))
+  (define content (get-feed-content slug render-fn contexts-by-slug))
 
   (feed-item item-tag-uri
              absolute-url
@@ -85,19 +83,20 @@
     [(string? date-val) (infer-moment date-val)]
     [else (infer-moment)]))
 
-(define (get-feed-content slug render-fn)
+(define (get-feed-content slug render-fn contexts-by-slug)
   (define info (current-site-info))
   (unless info
     (error 'get-feed-content "no site-info available"))
   (define matching-page (hash-ref (site-info-page-by-slug info) slug #f))
-  (if matching-page
-      (render-fn (page-doc matching-page))
+  (define ctx (hash-ref contexts-by-slug slug #f))
+  (if (and matching-page ctx)
+      (render-fn (page-doc matching-page) ctx)
       '(p "Content unavailable")))
 
 ;; ---------------------------------------------------------------------------
 ;; Feed Generation
 
-(define (generate-feed site info feed-cfg)
+(define (generate-feed site info feed-cfg contexts-by-slug)
   (define the-site-url (site-url site))
   (define the-site-title (site-title site))
   (define founded (site-founded site))
@@ -128,7 +127,7 @@
 
   (define feed-items
     (for/list ([pl (in-list filtered-pages)])
-      (page-link->feed-item pl feed-tag-uri the-site-url author render-fn)))
+      (page-link->feed-item pl feed-tag-uri the-site-url author render-fn contexts-by-slug)))
 
   (define the-feed (feed feed-tag-uri the-site-url the-site-title feed-items))
   (define feed-url (url-join the-site-url filename))
@@ -139,7 +138,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Build Integration
 
-(define (generate-feeds! site info)
+(define (generate-feeds! site info contexts-by-slug)
   (define feeds (site-feeds site))
   (when (and feeds (not (null? feeds)))
     (define root-dir (site-root site))
@@ -148,7 +147,7 @@
     (for ([feed-cfg (in-list feeds)])
       (define filename (feed-config-filename feed-cfg))
       (define output-path (build-path output-dir filename))
-      (define xml-str (generate-feed site info feed-cfg))
+      (define xml-str (generate-feed site info feed-cfg contexts-by-slug))
 
       (make-parent-directory* output-path)
       (call-with-output-file output-path

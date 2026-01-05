@@ -9,7 +9,12 @@
  (struct-out page)
  (struct-out page-link)
  (struct-out site-info)
- (hash-view-out context))
+ (hash-view-out context)
+ ;; Book publishing
+ (hash-view-out book)
+ (hash-view-out book-part)
+ (hash-view-out part)
+ (hash-view-out chapter))
 
 ;; ---------------------------------------------------------------------------
 ;; Configuration hash-views
@@ -26,7 +31,6 @@
    [root #:default #f]           ; site root directory, set by load-site
    [deploy-script #:default #f]
    [default-render #:default #f]
-   [element-fallback #:default #f]
    [feeds #:default '()]))
 
 (hash-view collection
@@ -58,9 +62,39 @@
 ;; Render context
 
 (hash-view context
-  (body
-   slug
+  (slug
+   url
    collection
    prev   ; procedure: () -> page-link?, (taxonomy) -> page-link?, (taxonomy term) -> page-link?
    next   ; procedure: same calling conventions as prev
    taxonomies))
+
+;; ---------------------------------------------------------------------------
+;; Book publishing hash-views
+
+;; Book configuration (from #lang camp/book)
+(hash-view book
+  (render-with                        ; (list module-path identifier)
+   output-folder
+   parts
+   [path #:default #f]                ; absolute path to book file, set by load-book
+   [includes #:default '()]))         ; files/dirs to copy to output before typst
+
+;; Book part configuration (from [[parts]] in book config)
+(hash-view book-part
+  (name
+   [pages #:default '()]
+   [collections #:default '()]
+   [date-from #:default #f]
+   [date-to #:default #f]
+   [taxonomies #:default #hasheq()]))
+
+;; Gathered part (passed to render procedure)
+(hash-view part
+  (name
+   chapters))
+
+;; Gathered chapter (passed to render procedure)
+(hash-view chapter
+  (slug
+   doc))

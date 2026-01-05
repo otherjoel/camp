@@ -8,7 +8,8 @@
          punct/fetch
          "structs.rkt"
          "xref.rkt"
-         "log.rkt")
+         "log.rkt"
+         "main.rkt")
 
 (provide camp-html-render%
          camp-doc->html-xexpr)
@@ -43,7 +44,8 @@
       `(dfn ((id ,(string-append "term-" normalized)) (class "term-def")) ,@content))
 
     (define/public (render-page-ref slug content)
-      (define pl (hash-ref page-index slug #f))
+      (define normalized (normalize-slug slug))
+      (define pl (hash-ref page-index normalized #f))
       (cond
         [pl
          (define url (page-link-url pl))
@@ -73,12 +75,31 @@
 
     (super-new [render-fallback camp-fallback])))
 
-(define (camp-doc->html-xexpr doc term-index page-index [element-fallback #f])
-  (define here-path (meta-ref doc 'here-path))
-  (send (new camp-html-render%
-             [doc doc]
-             [term-index term-index]
-             [page-index page-index]
-             [element-fallback element-fallback]
-             [source-path here-path])
-        render-document))
+(define (camp-doc->html-xexpr doc [fallback #f])
+  (define body-thunk (meta-ref doc 'camp-page-body-thunk))
+  (cond
+    [body-thunk
+     ;; #lang camp/page document: call thunk to get body xexprs
+     (define result (body-thunk))
+     (if (and (pair? result) (symbol? (car result)))
+         (list result)
+         result)]
+    [else
+     ;; Punct document: render with cross-reference resolution
+     (define info (current-site-info))
+     (unless info
+       (error 'camp-doc->html-xexpr
+              "no site-info available; must be called during build or within (parameterize ([current-site-info ...]) ...)"))
+     (define here-path (meta-ref doc 'here-path))
+     (define rendered
+       (send (new camp-html-render%
+                  [doc doc]
+                  [term-index (site-info-term-index info)]
+                  [page-index (site-info-page-index info)]
+                  [element-fallback fallback]
+                  [source-path here-path])
+             render-document))
+     ;; Strip outer wrapper, return just body content
+     (if (>= (length rendered) 2)
+         (cdr rendered)
+         '())]))

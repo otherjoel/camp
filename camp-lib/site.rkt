@@ -25,7 +25,6 @@
    [output-folder path-string? (optional "publish")]
    [deploy-script path-string? (optional #f)]
    [default-render readable-datum? (optional #f)]
-   [element-fallback non-empty-string? (optional #f)]
    [collections
     (array-of table
               [name non-empty-string? required]

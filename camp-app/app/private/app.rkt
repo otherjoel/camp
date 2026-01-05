@@ -6,7 +6,6 @@
          camp/build
          camp/serve
          net/sendurl
-         racket/file
          racket/gui
          racket/gui/easy
          racket/gui/easy/operator
@@ -14,7 +13,6 @@
          racket/match
          racket/path
          racket/port
-         racket/string
          racket/vector
          camp/app/private/settings
          camp/app/private/gui

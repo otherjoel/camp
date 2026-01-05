@@ -17,7 +17,6 @@
          "path-map.rkt"
          "log.rkt"
          "xref.rkt"
-         "html-render.rkt"
          "main.rkt"
          "feeds.rkt")
 
@@ -58,7 +57,7 @@
 
   (define page-by-slug
     (for/hash ([p (in-list all-pages)])
-      (values (page-slug p) p)))
+      (values (normalize-slug (page-slug p)) p)))
 
   (site-info all-pages term-index page-index taxonomy-index
              pages-by-collection page-links-by-collection page-by-slug))
@@ -118,11 +117,12 @@
 (define (build-page-index pages)
   (for/hash ([p (in-list pages)])
     (define slug (page-slug p))
+    (define normalized-slug (normalize-slug slug))
     (define doc (page-doc p))
     (define title (or (meta-ref doc 'title) slug))
     (define url (output-path->url (page-output-path p)))
     (define metas (hash-set (document-metas doc) 'slug slug))
-    (values slug (page-link url title metas))))
+    (values normalized-slug (page-link url title metas))))
 
 (define (output-path->url output-path)
   (define path-str (path->string output-path))
@@ -316,9 +316,6 @@
     (define output-dir (build-path root-dir (site-output-folder site)))
     (define static-dir (build-path root-dir (site-static-folder site)))
     (define collections (site-collections site))
-    (define element-fallback (resolve-element-fallback site))
-    (define term-index (site-info-term-index info))
-    (define page-index (site-info-page-index info))
     (define taxonomy-index (site-info-taxonomy-index info))
     (define pages (site-info-pages info))
     (define page-links-by-coll (site-info-page-links-by-collection info))
@@ -331,12 +328,19 @@
       (for/hasheq ([c (in-list collections)])
         (values (collection-name c) c)))
 
+    ;; Build all contexts first so they can be reused for feed generation
+    (define contexts-by-slug
+      (for/hash ([p (in-list pages)])
+        (define coll-name (page-collection-name p))
+        (define ctx (build-context p coll-name taxonomy-index page-links-by-coll))
+        (values (page-slug p) ctx)))
+
+    ;; Render pages using stored contexts
     (for ([p (in-list pages)])
       (define coll-name (page-collection-name p))
       (define coll (hash-ref coll-by-name coll-name))
       (define render-fn (resolve-render-function coll site))
-      (define body (render-page-body (page-doc p) term-index page-index element-fallback))
-      (define ctx (build-context p body coll-name taxonomy-index page-links-by-coll))
+      (define ctx (hash-ref contexts-by-slug (page-slug p)))
       (define html-xexpr (render-fn (page-doc p) ctx))
       (define output-path (build-path output-dir (page-output-path p)))
       (make-parent-directory* output-path)
@@ -347,7 +351,7 @@
 
     (log-camp-debug "built ~a pages" (length pages))
 
-    (generate-feeds! site info)))
+    (generate-feeds! site info contexts-by-slug)))
 
 ;; ---------------------------------------------------------------------------
 ;; Render Function Resolution
@@ -360,40 +364,19 @@
            (collection-name coll)))
   (apply dynamic-require render-spec))
 
-(define (resolve-element-fallback site)
-  (define spec (site-element-fallback site))
-  (and spec (apply dynamic-require spec)))
-
-
-;; ---------------------------------------------------------------------------
-;; Body Rendering
-
-(define (render-page-body doc term-index page-index element-fallback)
-  (define body-thunk (meta-ref doc 'camp-page-body-thunk))
-  (cond
-    [body-thunk
-     (define result (body-thunk))
-     (if (and (pair? result) (symbol? (car result)))
-         (list result)
-         result)]
-    [else
-     (define result (camp-doc->html-xexpr doc term-index page-index element-fallback))
-     (if (>= (length result) 2)
-         (cdr result)
-         '())]))
-
 ;; ---------------------------------------------------------------------------
 ;; Context Building
 
-(define (build-context p body coll-name taxonomy-index page-links-by-coll)
+(define (build-context p coll-name taxonomy-index page-links-by-coll)
   (define slug (page-slug p))
+  (define url (output-path->url (page-output-path p)))
   (define doc (page-doc p))
   (define coll-pages (hash-ref page-links-by-coll coll-name '()))
   (define page-taxonomies (build-page-taxonomies doc taxonomy-index coll-name))
   (define prev-proc (make-nav-proc prev-in slug coll-name coll-pages page-taxonomies taxonomy-index))
   (define next-proc (make-nav-proc next-in slug coll-name coll-pages page-taxonomies taxonomy-index))
-  (hasheq 'body body
-          'slug slug
+  (hasheq 'slug slug
+          'url url
           'collection coll-name
           'prev prev-proc
           'next next-proc

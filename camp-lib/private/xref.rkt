@@ -8,6 +8,7 @@
          term
          page-ref
          normalize-term-name
+         normalize-slug
          content->text)
 
 (define (normalize-term-name name)
@@ -23,6 +24,9 @@
                    (substring no-sses 0 (- (string-length no-sses) 1))
                    no-sses))
   (string-replace (regexp-replace* #rx"[ \t]+" no-s " ") " " "-"))
+
+(define (normalize-slug s)
+  (string-downcase (string-normalize-spaces (string-trim s) #px"[^A-Za-z0-9]+" "-")))
 
 (define (content->text content)
   (apply string-append
@@ -43,15 +47,13 @@
 (define (defterm . content)
   (define term-text (content->text content))
   (cons-to-metas-list 'terms-defined term-text)
-  `(term-definition () ,@content))
+  `(term-definition ,@content))
 
 (define define-term defterm)
 
 (define (term . content)
-  `(term () ,@content))
+  `(term ,@content))
 
 (define (page-ref slug-or-text . content)
-  (define slug (string-replace slug-or-text " " "-"))
-  (if (null? content)
-      `(page-ref ((slug ,slug)))
-      `(page-ref ((slug ,slug)) ,@content)))
+  (define slug (normalize-slug slug-or-text))
+  `(page-ref ((slug ,slug)) ,@content))

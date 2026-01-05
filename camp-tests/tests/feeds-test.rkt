@@ -113,10 +113,28 @@
 (define test-site (load-site (build-path fixture-site-root "site.rkt")))
 (define test-info (collect test-site))
 
+;; Build contexts for feed generation (mirrors what build! does)
+(define test-contexts-by-slug
+  (let ([taxonomy-index (site-info-taxonomy-index test-info)]
+        [page-links-by-coll (site-info-page-links-by-collection test-info)])
+    (for/hash ([p (in-list (site-info-pages test-info))])
+      (define coll-name (page-collection-name p))
+      (define slug (page-slug p))
+      (define url (string-append "/" (regexp-replace #rx"index\\.html$"
+                                                      (path->string (page-output-path p))
+                                                      "")))
+      (define coll-pages (hash-ref page-links-by-coll coll-name '()))
+      (values slug (hasheq 'slug slug
+                           'url url
+                           'collection coll-name
+                           'prev (λ args #f)
+                           'next (λ args #f)
+                           'taxonomies (hash))))))
+
 ;; Generate feed XML
 (define feed-xml
   (parameterize ([current-site-info test-info])
-    (generate-feed test-site test-info (car (site-feeds test-site)))))
+    (generate-feed test-site test-info (car (site-feeds test-site)) test-contexts-by-slug)))
 
 (check-pred string? feed-xml
             "Should produce a string of XML")
@@ -156,7 +174,7 @@
 
 (define rss-xml
   (parameterize ([current-site-info test-info])
-    (generate-feed test-site test-info rss-feed-config)))
+    (generate-feed test-site test-info rss-feed-config test-contexts-by-slug)))
 
 (check-true (string-contains? rss-xml "<rss")
             "RSS feed should have <rss> element")

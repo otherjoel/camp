@@ -99,9 +99,6 @@
      (map feed-config-render-with (site-feeds site))
      (if (site-default-render site)
          (list (site-default-render site))
-         '())
-     (if (site-element-fallback site)
-         (list (site-element-fallback site))
          '())))
 
   (filter-map
