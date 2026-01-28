@@ -9,44 +9,12 @@
          racket/path
          racket/string
          racket/vector
-         setup/getinfo
          camp/app/private/gui)
 
-(provide resolve-site-spec
+(provide (all-from-out camp) ; includes resolve-site-spec
          source-pattern->directory
          get-source-folders
          get-pages-in-folder)
-
-;; ============================================================================
-;; Site spec resolution
-;;
-;; A site spec can be:
-;; - A path string to a site.rkt file
-;; - A path object to a site.rkt file
-;; - A symbol representing a package name (looks for camp-site in info.rkt)
-
-(define (resolve-site-spec spec)
-  (cond
-    [(path? spec)
-     (if (file-exists? spec) spec #f)]
-    [(string? spec)
-     (define p (string->path spec))
-     (if (file-exists? p) p #f)]
-    [(symbol? spec)
-     (resolve-package-site spec)]
-    [else #f]))
-
-(define (resolve-package-site pkg-sym)
-  (define pkg-name (symbol->string pkg-sym))
-  (define all-dirs (find-relevant-directories '(camp-site) 'all-available))
-  (for/or ([dir (in-list all-dirs)])
-    (define get-info (get-info/full dir))
-    (and get-info
-         (let ([collection (get-info 'collection (λ () #f))]
-               [camp-site (get-info 'camp-site (λ () #f))])
-           (and (equal? collection pkg-name)
-                camp-site
-                (build-path dir camp-site))))))
 
 ;; ============================================================================
 ;; Path utilities
