@@ -4,7 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         camp/private/output)
+         camp/private/output
+         (only-in camp/private/log use-color? color))
 
 (define output-tests
   (test-suite
