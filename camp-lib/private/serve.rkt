@@ -18,8 +18,7 @@
          web-server/http/response-structs
          web-server/http/response
          web-server/web-server
-         "log.rkt"
-         "output.rkt")
+         "log.rkt")
 
 (provide start-server)
 
@@ -58,15 +57,24 @@
           (zpad (quotient (abs tz-offset) 3600))
           (zpad (/ (remainder (abs tz-offset) 3600) 60))))
 
+(define (format-status-code code)
+  (define indicator
+    (cond
+      [(< code 300) (green "●")]
+      [(< code 400) (cyan "●")]
+      [(< code 500) (yellow "●")]
+      [else (red "●")]))
+  (~a indicator " " code))
+
 (define (log-modern req resp)
   (define method (string-upcase (bytes->string/utf-8 (request-method req))))
   (define path (url->string (request-uri req)))
   (define code (response-code resp))
   (log-camp-info "~a ~a ~a ~a"
-                 (simple-time)
+                 (dim (simple-time))
+                 (format-status-code code)
                  (~a method #:min-width 4)
-                 path
-                 code))
+                 path))
 
 (define (log-apache req resp)
   (log-camp-info
@@ -310,15 +318,11 @@
 
   (define server-url (~a "http://localhost:" port))
 
-  (displayln "")
-  (displayln (~a "  " (bold "camp serve")))
-  (displayln (~a "  " (dim "Serving") " " (path->string (simplify-path base-dir))))
-  (displayln (~a "  " (dim "URL") "     " (cyan server-url)))
+  (log-camp-info (~a "  " (dim "Serving") " " (path->string (simplify-path base-dir))))
+  (log-camp-info (~a "  " (dim "URL") "     " (cyan server-url)))
   (when watch?
-    (displayln (~a "  " (dim "Watching for changes..."))))
-  (displayln "")
-  (displayln (~a "  " (dim "Press Ctrl+C to stop")))
-  (displayln "")
+    (log-camp-info (~a "  " (dim "Watching for changes..."))))
+  (log-camp-info (~a "  " (dim "Press Ctrl+C to stop")))
 
   (define shutdown-server
     (parameterize ([current-directory base-dir])
