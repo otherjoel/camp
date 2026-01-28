@@ -23,7 +23,9 @@
 (provide collect
          build!
          copy-static-files
-         sync-static-files)
+         sync-static-files
+         build-context
+         output-path->url)  ; exported for testing and pagination
 
 ;; ---------------------------------------------------------------------------
 ;; Collect Pass
@@ -215,6 +217,15 @@
 ;; ---------------------------------------------------------------------------
 ;; Static File Copying
 
+(define (copy-file-preserving-mtime src dest)
+  (define mtime (file-or-directory-modify-seconds src))
+  (copy-file src dest #:exists-ok? #t)
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (log-camp-warning "failed to preserve timestamp for ~a: ~a"
+                                       dest (exn-message e)))])
+    (file-or-directory-modify-seconds dest mtime)))
+
 (define (copy-static-files source-dir dest-dir)
   (when (directory-exists? source-dir)
     (make-directory* dest-dir)
@@ -226,7 +237,7 @@
          (make-directory* dest-path)]
         [(file-exists? item)
          (make-parent-directory* dest-path)
-         (copy-file item dest-path #:exists-ok? #t)]))))
+         (copy-file-preserving-mtime item dest-path)]))))
 
 ;; ---------------------------------------------------------------------------
 ;; Static File Sync
@@ -281,7 +292,7 @@
           (make-directory* dest-path)]
          [(file-exists? item)
           (make-parent-directory* dest-path)
-          (copy-file item dest-path #:exists-ok? #t)]))
+          (copy-file-preserving-mtime item dest-path)]))
 
      (write-manifest manifest-path current-files)
 
@@ -336,22 +347,138 @@
         (values (page-slug p) ctx)))
 
     ;; Render pages using stored contexts
+    (define page-count 0)
     (for ([p (in-list pages)])
       (define coll-name (page-collection-name p))
       (define coll (hash-ref coll-by-name coll-name))
       (define render-fn (resolve-render-function coll site))
       (define ctx (hash-ref contexts-by-slug (page-slug p)))
-      (define html-xexpr (render-fn (page-doc p) ctx))
-      (define output-path (build-path output-dir (page-output-path p)))
-      (make-parent-directory* output-path)
-      (define html-string (xexpr->html5 html-xexpr))
-      (call-with-output-file output-path
-        (λ (out) (display html-string out))
-        #:exists 'replace))
+      (define doc (page-doc p))
 
-    (log-camp-debug "built ~a pages" (length pages))
+      ;; Check for paginated camp/page
+      (define body-thunk (meta-ref doc 'camp-page-body-thunk))
+      (define pagination-result
+        (and body-thunk
+             (let ([result (body-thunk)])
+               (and (paginated-content? result) result))))
+
+      (cond
+        [pagination-result
+         ;; Build paginated pages
+         (set! page-count
+               (+ page-count
+                  (build-paginated-page! p pagination-result render-fn output-dir info)))]
+        [else
+         ;; Normal page rendering
+         (define html-xexpr (render-fn doc ctx))
+         (define output-path (build-path output-dir (page-output-path p)))
+         (make-parent-directory* output-path)
+         (define html-string (xexpr->html5 html-xexpr))
+         (call-with-output-file output-path
+           (λ (out) (display html-string out))
+           #:exists 'replace)
+         (set! page-count (add1 page-count))]))
+
+    (log-camp-debug "built ~a pages" page-count)
 
     (generate-feeds! site info contexts-by-slug)))
+
+;; ---------------------------------------------------------------------------
+;; Paginated Page Building
+
+(define (build-paginated-page! page pc render-fn output-dir info)
+  (define coll-name (paginated-content-collection-name pc))
+  (define per-page (paginated-content-per-page pc))
+  (define page-slug-str (paginated-content-page-slug pc))
+  (define render-proc (paginated-content-render-proc pc))
+
+  (define all-items
+    (hash-ref (site-info-page-links-by-collection info) coll-name '()))
+  (define total-items (length all-items))
+  (define total-pages (max 1 (ceiling (/ total-items per-page))))
+
+  (define base-output (page-output-path page))
+  (define base-url (output-path->url base-output))
+  (define original-doc (page-doc page))
+  (define original-title (or (meta-ref original-doc 'title) ""))
+  (define original-metas (document-metas original-doc))
+
+  (for ([page-num (in-range 1 (add1 total-pages))])
+    (define start (* (sub1 page-num) per-page))
+    (define items
+      (take (drop all-items (min start total-items))
+            (min per-page (max 0 (- total-items start)))))
+
+    ;; Calculate output path for this page
+    (define output-path
+      (if (= page-num 1)
+          (build-path output-dir base-output)
+          (let* ([base-dir (path-only base-output)]
+                 [dir-path (if base-dir
+                               (build-path output-dir base-dir page-slug-str
+                                           (number->string page-num))
+                               (build-path output-dir page-slug-str
+                                           (number->string page-num)))])
+            (build-path dir-path "index.html"))))
+
+    ;; Calculate URLs
+    (define current-url
+      (if (= page-num 1)
+          base-url
+          (string-append base-url page-slug-str "/" (number->string page-num) "/")))
+
+    (define prev-url
+      (cond
+        [(= page-num 1) #f]
+        [(= page-num 2) base-url]
+        [else (string-append base-url page-slug-str "/" (number->string (sub1 page-num)) "/")]))
+
+    (define next-url
+      (if (< page-num total-pages)
+          (string-append base-url page-slug-str "/" (number->string (add1 page-num)) "/")
+          #f))
+
+    ;; Create pagination context
+    (define pag
+      (pagination page-num total-pages total-items base-url current-url prev-url next-url))
+
+    ;; Call user's render proc to get body content
+    (define body-content (render-proc items pag))
+
+    ;; Create page title (append page number for pages 2+)
+    (define page-title
+      (if (= page-num 1)
+          original-title
+          (format "~a - Page ~a" original-title page-num)))
+
+    ;; Create synthetic doc with modified title and cached body
+    (define synthetic-metas
+      (hash-set* original-metas
+                 'title page-title
+                 'camp-page-body-thunk (λ () body-content)))
+    (define synthetic-doc
+      (document synthetic-metas '() '()))
+
+    ;; Build context for this page
+    (define ctx
+      (hasheq 'slug (if (= page-num 1)
+                        (page-slug page)
+                        (format "~a/~a/~a" (page-slug page) page-slug-str page-num))
+              'url current-url
+              'collection (page-collection-name page)
+              'prev (λ args #f)  ; paginated pages don't have collection prev/next
+              'next (λ args #f)
+              'taxonomies (hash)))
+
+    ;; Render through normal render function
+    (define html-xexpr (render-fn synthetic-doc ctx))
+    (make-parent-directory* output-path)
+    (define html-string (xexpr->html5 html-xexpr))
+    (call-with-output-file output-path
+      (λ (out) (display html-string out))
+      #:exists 'replace))
+
+  total-pages)
 
 ;; ---------------------------------------------------------------------------
 ;; Render Function Resolution

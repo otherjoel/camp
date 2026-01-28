@@ -7,6 +7,7 @@
          "private/structs.rkt"
          "private/main.rkt"
          "private/book.rkt"
+         "private/path-map.rkt"
          "private/typst-render.rkt"
          "private/html-render.rkt"
          "private/book-build.rkt")
@@ -24,8 +25,17 @@
  (struct-out page-link)
  (struct-out site-info)
  (struct-out document)
+ ;; Pagination
+ (struct-out pagination)
+ (struct-out paginated-content)
  current-site-info
  file-path->site-path
+ resolve-site-spec
+ ;; Path pattern predicates
+ source-path-pattern?
+ output-path-pattern?
+ file-extension?
+ non-rkt-file-extension?
  ;; HTML rendering
  camp-doc->html-xexpr
  ;; Typst rendering
@@ -50,14 +60,27 @@
  [get-taxonomy-pages (->* (string? string?)
                           ((or/c string? #f))
                           (or/c list? hash?))]
- [prev-in (-> (listof page-link?) string? (or/c page-link? #f))]
- [next-in (-> (listof page-link?) string? (or/c page-link? #f))]
+ [prev (->* (context?) (string? string?) (or/c page-link? #f))]
+ [next (->* (context?) (string? string?) (or/c page-link? #f))]
  [filter-pages (->* ((listof page-link?))
                     (#:date-from (or/c date-provider? #f)
                      #:date-to (or/c date-provider? #f)
                      #:date-key symbol?
                      #:taxonomies hash?)
                     (listof page-link?))]
+ ;; Pagination
+ [paginate (->* (string?
+                 #:per-page exact-positive-integer?
+                 (-> (listof page-link?) pagination? any/c))
+                (#:page-slug string?)
+                paginated-content?)]
+ [page-link-doc (-> page-link? document?)]
+ [pagination-nav (->* (pagination?) (#:always-show? boolean?) any/c)]
  ;; Book building
  [build-book! (-> book? (or/c path? #f))]
- [gather-book-parts (-> book? site? site-info? list?)])
+ [gather-book-parts (-> book? site? site-info? list?)]
+ ;; Path mapping
+ [format-output-path (-> output-path-pattern?
+                         string?
+                         (or/c date-provider? #f)
+                         path?)])

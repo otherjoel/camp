@@ -10,6 +10,9 @@
  (struct-out page-link)
  (struct-out site-info)
  (hash-view-out context)
+ ;; Pagination
+ (struct-out pagination)
+ (struct-out paginated-content)
  ;; Book publishing
  (hash-view-out book)
  (hash-view-out book-part)
@@ -28,7 +31,8 @@
    static-folder
    output-folder
    collections
-   [root #:default #f]           ; site root directory, set by load-site
+   [root #:default #f]                ; site root directory, set by load-site
+   [racket-collection #:default #f]   ; package collection name, set by load-site
    [deploy-script #:default #f]
    [default-render #:default #f]
    [feeds #:default '()]))
@@ -56,6 +60,26 @@
                    pages-by-collection       ; collection-name → (listof page?)
                    page-links-by-collection  ; collection-name → (listof page-link?)
                    page-by-slug)             ; slug → page?
+  #:transparent)
+
+;; ---------------------------------------------------------------------------
+;; Pagination
+
+(struct pagination
+  (page-num        ; positive-integer?
+   total-pages     ; positive-integer?
+   total-items     ; natural?
+   base-url        ; string?
+   current-url     ; string?
+   prev-url        ; (or/c string? #f)
+   next-url)       ; (or/c string? #f)
+  #:transparent)
+
+(struct paginated-content
+  (collection-name  ; string?
+   per-page         ; exact-positive-integer?
+   page-slug        ; string?
+   render-proc)     ; (-> (listof page-link?) pagination? xexpr?)
   #:transparent)
 
 ;; ---------------------------------------------------------------------------

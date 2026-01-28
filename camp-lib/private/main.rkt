@@ -15,6 +15,7 @@
          "xref.rkt")
 
 (provide file-path->site-path
+         resolve-site-spec
          load-site
          filter-pages
          current-site-info
@@ -22,12 +23,40 @@
          get-taxonomy-terms
          get-taxonomy-pages
          prev-in
-         next-in)
+         next-in
+         prev
+         next
+         ;; Pagination
+         paginate
+         page-link-doc
+         pagination-nav)
 
 ;; ---------------------------------------------------------------------------
 ;; Site-Info Parameter
 
 (define current-site-info (make-parameter #f))
+
+;; ---------------------------------------------------------------------------
+;; Site Resolution
+
+(define (resolve-site-spec spec)
+  (cond
+    [(path? spec) (and (file-exists? spec) spec)]
+    [(string? spec)
+     (if (file-exists? spec)
+         (string->path spec)
+         (resolve-site-by-collection spec))]
+    [(symbol? spec) (resolve-site-by-collection (symbol->string spec))]
+    [else #f]))
+
+(define (resolve-site-by-collection name)
+  (define all-dirs (find-relevant-directories '(camp-site) 'all-available))
+  (for/or ([dir (in-list all-dirs)])
+    (define get-info (get-info/full dir))
+    (and get-info
+         (equal? (get-info 'collection (λ () #f)) name)
+         (let ([camp-site (get-info 'camp-site (λ () #f))])
+           (and camp-site (build-path dir camp-site))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Package Info Helpers
@@ -81,7 +110,9 @@
   (dynamic-rerequire resolved)
   (define site-config (dynamic-require resolved 'toml))
   (define site-root (simplify-path (build-path resolved 'up)))
-  (hash-set site-config 'root site-root))
+  (define get-info (get-info/full site-root))
+  (define collection-name (and get-info (get-info 'collection (λ () #f))))
+  (hash-set* site-config 'root site-root 'racket-collection collection-name))
 
 ;; ---------------------------------------------------------------------------
 ;; Collection Retrieval
@@ -184,3 +215,53 @@
       [(null? (cdr pages)) #f]
       [(equal? (normalize-slug (page-link-slug (car pages))) normalized-current) (cadr pages)]
       [else (loop (cdr pages))])))
+
+;; ---------------------------------------------------------------------------
+;; Context Navigation
+
+(define (prev ctx . args)
+  (apply (context-prev ctx) args))
+
+(define (next ctx . args)
+  (apply (context-next ctx) args))
+
+;; ---------------------------------------------------------------------------
+;; Pagination
+
+(define (paginate collection-name
+                   #:per-page per-page
+                   #:page-slug [page-slug "page"]
+                   render-proc)
+  (paginated-content collection-name per-page page-slug render-proc))
+
+(define (page-link-doc pl)
+  (define info (current-site-info))
+  (unless info
+    (error 'page-link-doc "no site-info available (not in build context)"))
+  (define slug (hash-ref (page-link-metas pl) 'slug #f))
+  (unless slug
+    (error 'page-link-doc "page-link has no slug in metas"))
+  (define normalized (normalize-slug slug))
+  (define pg (hash-ref (site-info-page-by-slug info) normalized #f))
+  (unless pg
+    (error 'page-link-doc "page not found for slug: ~a" slug))
+  (page-doc pg))
+
+(define (pagination-nav pag #:always-show? [always-show? #f])
+  (define total (pagination-total-pages pag))
+  (define page-num (pagination-page-num pag))
+  (define prev-url (pagination-prev-url pag))
+  (define next-url (pagination-next-url pag))
+  (cond
+    [(and (not always-show?) (= total 1))
+     '()]
+    [else
+     `(nav ((class "pagination"))
+        ,@(if prev-url
+              `((a ((href ,prev-url) (class "pagination-prev")) "← Newer"))
+              '())
+        (span ((class "pagination-info"))
+              ,(format "Page ~a of ~a" page-num total))
+        ,@(if next-url
+              `((a ((href ,next-url) (class "pagination-next")) "Older →"))
+              '()))]))
