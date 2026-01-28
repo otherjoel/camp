@@ -8,8 +8,7 @@
          punct/fetch
          punct/doc
          gregor
-         "structs.rkt"
-         "log.rkt")
+         "structs.rkt")
 
 (provide source-pattern->directory
          is-source?
@@ -64,14 +63,7 @@
      (values
       (lambda (idx)
         (define p (list-ref paths idx))
-        (define doc
-          (with-handlers ([exn:fail?
-                           (lambda (e)
-                             (log-camp-warning "failed to load ~a: ~a" p (exn-message e))
-                             (document (hasheq 'here-path p 'title "Error loading document")
-                                       '()
-                                       '()))])
-            (get-doc p)))
+        (define doc (get-doc p))
         (define slug (or (meta-ref doc 'slug)
                          (path->slug p source-extension)))
         (values p slug doc))
