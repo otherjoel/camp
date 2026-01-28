@@ -38,10 +38,10 @@
 
 ;; Render function for static pages
 ;; Handles both Punct documents and #lang camp/page documents
-(define (render-page doc context)
+(define (render-page doc ctxt)
   (define title (or (meta-ref doc 'title) "Untitled"))
   (define body (camp-doc->html-xexpr doc))
-  (define slug (hash-ref context 'slug))
+  (define slug (hash-ref ctxt 'slug))
 
   (cond
     ;; #lang camp/page documents: body is already fully formed
@@ -71,14 +71,12 @@
                 ,@extra-content)))]))
 
 ;; Render function for blog posts
-(define (render-post doc context)
+(define (render-post doc ctxt)
   (define title (or (meta-ref doc 'title) "Untitled"))
   (define date (meta-ref doc 'date))
   (define body (camp-doc->html-xexpr doc))
-  (define tags (hash-ref (hash-ref context 'taxonomies) "tags" '()))
-  (define series (hash-ref (hash-ref context 'taxonomies) "series" '()))
-  (define prev (hash-ref context 'prev))
-  (define next (hash-ref context 'next))
+  (define tags (hash-ref (hash-ref ctxt 'taxonomies) "tags" '()))
+  (define series (hash-ref (hash-ref ctxt 'taxonomies) "series" '()))
 
   (layout title
           `((article ((class "post"))
@@ -105,13 +103,13 @@
                   ,@body)
 
              (nav ((class "pagination"))
-                  ,(let ([p (prev)])
+                  ,(let ([p (prev ctxt)])
                      (if p
                          `(a ((href ,(page-link-url p))
                               (rel "prev"))
                              ,(page-link-title p))
                          ""))
-                  ,(let ([n (next)])
+                  ,(let ([n (next ctxt)])
                      (if n
                          `(a ((href ,(page-link-url n))
                               (rel "next"))
