@@ -8,7 +8,7 @@
          camp        ; Re-export camp bindings so they're available in body forms
          punct/doc)  ; Re-export for document struct
 
-(provide (except-out (all-from-out racket/base) #%module-begin)
+(provide (except-out (all-from-out racket/base) #%module-begin date date?)
          (rename-out [camp-page-module-begin #%module-begin])
          (all-from-out camp)
          (all-from-out punct/doc)
@@ -64,14 +64,14 @@
 
 (define-syntax (camp-page-process stx)
   (syntax-case stx ()
-    [(_ here-path in-body? ((key val) ...) (body-expr ...))
+    [(_ here_path in-body? ((key val) ...) (body-expr ...))
      #'(begin
          (provide doc)
          (define body-thunk
            (λ () (let () body-expr ...)))
          (define doc
            (document
-            (for/fold ([h (hasheq 'here-path here-path
+            (for/fold ([h (hasheq 'here-path here_path
                                   'camp-page-body-thunk body-thunk)])
                       ([k (in-list (list (quote key) ...))]
                        [v (in-list (list val ...))])
