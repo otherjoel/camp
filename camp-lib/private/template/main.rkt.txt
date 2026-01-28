@@ -1,0 +1,10 @@
+#lang racket/base
+
+;; Bindings for #lang punct @name
+;; All source files using this lang line get these bindings automatically.
+
+(require camp
+         camp/xref)
+
+(provide (all-from-out camp)
+         (all-from-out camp/xref))

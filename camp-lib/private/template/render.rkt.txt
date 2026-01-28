@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require camp
+         punct/doc
          punct/fetch)
 
 (provide render-page
@@ -21,10 +22,10 @@
       (main ,@"@"body-content)
       (footer (p "Powered by Camp"))))))
 
-(define (render-page doc context)
+(define (render-page doc ctxt)
   (define title (or (meta-ref doc 'title) "Untitled"))
-  (define body (hash-ref context 'body))
-  (define slug (hash-ref context 'slug))
+  (define body (camp-doc->html-xexpr doc))
+  (define slug (context-slug ctxt))
 
   ;; On the home page, show recent blog posts
   (define blog-listing
@@ -34,30 +35,28 @@
              (h2 "Recent Posts")
              (ul
               ,@"@"(for/list ([p posts])
-                    `(li
-                      (a ((href ,(page-link-url p)))
-                         ,(page-link-title p))
-                      ,(let ([date (hash-ref (page-link-metas p) 'date #f)])
-                         (if date
-                             `(span ((class "date")) " · " ,(~d "d MMM yyyy" date))
-                             ""))))))))
+                   `(li
+                     (a ((href ,(page-link-url p)))
+                        ,(page-link-title p))
+                     ,(let ([date (hash-ref (page-link-metas p) 'date #f)])
+                        (if date
+                            `(span ((class "date")) " · " ,(~d "d MMM yyyy" date))
+                            ""))))))))
         '()))
 
   (layout title `((article (h1 ,title) ,@"@"body ,@"@"blog-listing))))
 
-(define (render-post doc context)
+(define (render-post doc ctxt)
   (define title (or (meta-ref doc 'title) "Untitled"))
   (define date (meta-ref doc 'date))
-  (define body (hash-ref context 'body))
-  (define prev (hash-ref context 'prev))
-  (define next (hash-ref context 'next))
+  (define body (camp-doc->html-xexpr doc))
   (layout title
           `((article ((class "post"))
              (h1 ,title)
              ,(if date `(time ((datetime ,(~d "yyyy-MM-dd" date))) ,(~d "d MMM yyyy" date)) "")
              ,@"@"body
              (nav ((class "pagination"))
-                  ,(let ([p (prev)])
+                  ,(let ([p (prev ctxt)])
                      (if p `(a ((href ,(page-link-url p))) "← " ,(page-link-title p)) ""))
-                  ,(let ([n (next)])
+                  ,(let ([n (next ctxt)])
                      (if n `(a ((href ,(page-link-url n))) ,(page-link-title n) " →") "")))))))

@@ -18,7 +18,7 @@
          "serve.rkt"
          "watch.rkt"
          "structs.rkt"
-         "output.rkt"
+         (only-in "output.rkt" format-duration with-timing count-files-in-directory)
          "log.rkt"
          "new-site.rkt")
 
@@ -37,38 +37,55 @@
     [else
      (define cmd (vector-ref args 0))
      (define cmd-args (vector-drop args 1))
-     (match cmd
-       ["build" (run-build cmd-args)]
-       ["serve" (run-serve cmd-args)]
-       ["deploy" (run-deploy cmd-args)]
-       ["new" (run-new cmd-args)]
-       ["help" (show-usage)]
-       [_ (eprintf "Unknown command: ~a\n" cmd)
-          (show-usage)
-          (exit 1)])]))
+     (parameterize ([current-command-line-arguments cmd-args])
+       (match cmd
+         ["build" (with-logging-to-stderr run-build)]
+         ["serve" (with-logging-to-stderr run-serve)]
+         ["deploy" (with-logging-to-stderr run-deploy)]
+         ["new" (with-logging-to-stderr run-new)]
+         ["help" (show-usage)]
+         [_ (eprintf "Unknown command: ~a\n" cmd)
+            (show-usage)
+            (exit 1)]))]))
 
 (define (show-usage)
   (displayln "Usage: raco camp <command> [options]")
   (displayln "")
   (displayln "Commands:")
-  (displayln "  build [options] [site-path]   Build the site")
+  (displayln "  build [options] [site]        Build the site")
   (displayln "    --fresh                     Clear output folder before building")
   (displayln "    --verbose, -v               Show detailed output")
   (displayln "    --drama                     Treat warnings as errors (non-zero exit)")
-  (displayln "  serve [options] [site-path]   Start dev server")
+  (displayln "  serve [options] [site]        Start dev server")
   (displayln "    --port N                    Port number (default: 8000)")
   (displayln "    --no-watch                  Disable file watching")
   (displayln "    --apache-log                Use Apache combined log format")
-  (displayln "  deploy [site-path]            Run deploy script")
+  (displayln "  deploy [site]                 Run deploy script")
   (displayln "  new <name>                    Create new site from template")
   (displayln "  help                          Show this help")
   (displayln "")
-  (displayln "If site-path is not specified, looks for site.rkt in current directory."))
+  (displayln "The [site] argument can be a path to site.rkt or an installed package name.")
+  (displayln "If not specified, looks for site.rkt in current directory."))
+
+(define (resolve-site-spec/cli spec)
+  (cond
+    [(not spec)
+     (if (file-exists? "site.rkt")
+         "site.rkt"
+         (begin
+           (log-camp-error "No site.rkt found in current directory.")
+           (log-camp-error "Specify a path or installed package name.")
+           (exit 1)))]
+    [(resolve-site-spec spec)]
+    [else
+     (log-camp-error (~a "Not found: " spec))
+     (log-camp-error "Provide a path to site.rkt or an installed package name.")
+     (exit 1)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Build command
 
-(define (run-build args)
+(define (run-build)
   (define fresh? #f)
   (define verbose? #f)
   (define warnings-as-errors? #f)
@@ -76,7 +93,7 @@
   (define remaining
     (command-line
      #:program "raco camp build"
-     #:argv args
+     #:argv (current-command-line-arguments)
      #:once-each
      [("--fresh") "Clear output folder before building"
                   (set! fresh? #t)]
@@ -84,17 +101,10 @@
                          (set! verbose? #t)]
      [("--drama") "Treat warnings as errors (non-zero exit)"
                  (set! warnings-as-errors? #t)]
-     #:args ([path #f])
-     path))
+     #:args ([site #f])
+     site))
 
-  (define resolved-path
-    (cond
-      [remaining remaining]
-      [(file-exists? "site.rkt") "site.rkt"]
-      [else
-       (eprintf "Error: No site.rkt found in current directory.\n")
-       (eprintf "Specify a path: raco camp build <site-path>\n")
-       (exit 1)]))
+  (define resolved-path (resolve-site-spec/cli remaining))
 
   (define total-start (current-inexact-monotonic-milliseconds))
 
@@ -102,27 +112,23 @@
   (define (collect-warning! vec)
     (set! warnings (cons (vector-ref vec 1) warnings)))
 
-  (displayln "")
-  (displayln (bold "camp build"))
-  (displayln "")
-
   (define-values (site load-ms)
     (with-timing
       (with-handlers ([exn:fail?
                        (λ (e)
-                         (print-error "loading site" (exn-message e))
+                         (log-error "loading site" (exn-message e))
                          (exit 1))])
         (load-site resolved-path))))
 
   (when verbose?
-    (print-phase-line "Load" (~a "from " resolved-path) load-ms))
+    (log-phase-line "Load" (~a "from " resolved-path) load-ms))
 
   (when fresh?
     (define output-dir (build-path (site-root site) (site-output-folder site)))
     (when (directory-exists? output-dir)
       (delete-directory/files output-dir)
       (when verbose?
-        (print-phase-line "Clean" "cleared output folder" #f))))
+        (log-phase-line "Clean" "cleared output folder" #f))))
 
   (define coll-count (length (site-collections site)))
   (define feed-count (length (site-feeds site)))
@@ -136,16 +142,16 @@
         (λ ()
           (with-handlers ([exn:fail?
                            (λ (e)
-                             (print-error "collecting" (exn-message e))
+                             (log-error "collecting" (exn-message e))
                              (exit 1))])
             (collect site)))
         #:logger camp-logger
         'warning)))
 
   (define page-count (length (site-info-pages info)))
-  (print-phase-line "Collect"
-                    (format-count-desc page-count "page" coll-count "collection")
-                    collect-ms)
+  (log-phase-line "Collect"
+                  (format-count-desc page-count "page" coll-count "collection")
+                  collect-ms)
 
   (define-values (_ build-ms)
     (with-timing
@@ -154,25 +160,25 @@
         (λ ()
           (with-handlers ([exn:fail?
                            (λ (e)
-                             (print-error "building" (exn-message e))
+                             (log-error "building" (exn-message e))
                              (exit 1))])
             (build! site info)))
         #:logger camp-logger
         'warning)))
 
-  (print-phase-line "Build"
-                    (pluralize page-count "page")
-                    build-ms)
+  (log-phase-line "Build"
+                  (pluralize page-count "page")
+                  build-ms)
 
   (when (> feed-count 0)
-    (print-phase-line "Feeds"
-                      (pluralize feed-count "feed")
-                      #f))
+    (log-phase-line "Feeds"
+                    (pluralize feed-count "feed")
+                    #f))
 
   (when (> static-count 0)
-    (print-phase-line "Static"
-                      (pluralize static-count "file")
-                      #f))
+    (log-phase-line "Static"
+                    (pluralize static-count "file")
+                    #f))
 
   (define warning-count (length warnings))
   (when (> warning-count 0)
@@ -181,28 +187,24 @@
       (if (string-suffix? root-str "/")
           root-str
           (string-append root-str "/")))
-    (displayln "")
-    (displayln (~a "  " (yellow "⚠") " " (bold (pluralize warning-count "warning")) ":"))
+    (log-camp-info (~a "  " (yellow "⚠") " " (bold (pluralize warning-count "warning")) ":"))
     (for ([w (in-list (reverse warnings))])
       (define display-warning (string-replace w root-prefix ""))
-      (displayln (~a "    • " display-warning))))
+      (log-camp-info (~a "    • " display-warning))))
 
   (define total-ms (- (current-inexact-monotonic-milliseconds) total-start))
-  (displayln "")
   (if (and warnings-as-errors? (> warning-count 0))
       (begin
-        (displayln (~a "  " (red "✗") " " (bold (~a "Failed in " (format-duration total-ms)))
-                       " " (dim "(warnings treated as errors)")))
-        (displayln "")
+        (log-camp-info (~a "  " (red "✗") " " (bold (~a "Failed in " (format-duration total-ms)))
+                     " " (dim "(warnings treated as errors)")))
         (exit 1))
       (begin
-        (displayln (~a "  " (green "✓") " " (bold (~a "Done in " (format-duration total-ms)))))
-        (displayln ""))))
+        (log-camp-info (~a "  " (green "✓") " " (bold (~a "Done in " (format-duration total-ms))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Serve command
 
-(define (run-serve args)
+(define (run-serve)
   (define port 8000)
   (define watch? #t)
   (define log-format 'modern)
@@ -210,31 +212,23 @@
   (define remaining
     (command-line
      #:program "raco camp serve"
-     #:argv args
+     #:argv (current-command-line-arguments)
      #:once-each
      [("--port") p "Port number (default: 8000)"
                  (define n (string->number p))
                  (unless (and n (exact-positive-integer? n) (<= n 65535))
-                   (eprintf "Error: Invalid port number: ~a\n" p)
+                   (log-camp-error (~a "Invalid port number: " p))
                    (exit 1))
                  (set! port n)]
      [("--no-watch") "Disable file watching"
                      (set! watch? #f)]
      [("--apache-log") "Use Apache combined log format"
                        (set! log-format 'apache)]
-     #:args ([path #f])
-     path))
+     #:args ([site #f])
+     site))
 
   (define site-config-path
-    (simplify-path
-     (path->complete-path
-      (cond
-        [remaining remaining]
-        [(file-exists? "site.rkt") "site.rkt"]
-        [else
-         (eprintf "Error: No site.rkt found in current directory.\n")
-         (eprintf "Specify a path: raco camp serve <site-path>\n")
-         (exit 1)]))))
+    (simplify-path (path->complete-path (resolve-site-spec/cli remaining))))
 
   (define current-site #f)
 
@@ -243,7 +237,7 @@
 
   (with-handlers ([exn:fail?
                    (λ (e)
-                     (print-error "loading site" (exn-message e))
+                     (log-error "loading site" (exn-message e))
                      (exit 1))])
     (reload-site!))
 
@@ -261,7 +255,7 @@
   (define (do-rebuild!)
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (displayln (~a "  " (red "✗") " Build error: " (exn-message e)))
+                       (log-camp-info (~a "  " (red "✗") " Build error: " (exn-message e)))
                        #f)])
       (define info (collect current-site))
       (build! current-site info)
@@ -270,7 +264,7 @@
   (define (do-static-sync!)
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (displayln (~a "  " (red "✗") " Static sync error: " (exn-message e)))
+                       (log-camp-info (~a "  " (red "✗") " Static sync error: " (exn-message e)))
                        #f)])
       (sync-static-files (get-static-dir) (get-output-dir) manifest-path)
       #t))
@@ -289,31 +283,10 @@
         (dynamic-rerequire (car (site-default-render current-site))))))
 
   (unless (directory-exists? (get-output-dir))
-    (displayln "")
-    (displayln (~a "  " (dim "Output folder not found, building...")))
+    (log-camp-info (~a "  " (dim "Output folder not found, building...")))
     (unless (do-rebuild!)
       (exit 1))
-    (displayln (~a "  " (green "✓") " Initial build complete"))
-    (displayln ""))
-
-  (define log-receiver (make-log-receiver camp-logger 'info))
-
-  (define log-thread
-    (thread
-     (lambda ()
-       (let loop ()
-         (define vec (sync log-receiver))
-         (define raw-msg (vector-ref vec 1))
-         (define msg (if (string-prefix? raw-msg "camp: ")
-                         (substring raw-msg 6)
-                         raw-msg))
-         (define colorized
-           (if (eq? log-format 'modern)
-               (colorize-modern-log msg)
-               msg))
-         (displayln (~a "  " colorized))
-         (flush-output)
-         (loop)))))
+    (log-camp-info (~a "  " (green "✓") " Initial build complete")))
 
   (define shutdown-server
     (start-server (get-output-dir) #:port port #:watch? watch? #:log-format log-format))
@@ -329,43 +302,42 @@
     (define rel-path (make-relative-path changed-path))
     (define change-type (path-change-type changed-path current-site site-config-path))
 
-    (displayln "")
-    (displayln (~a "  " (dim (current-time-str)) "  " (cyan "●") " " rel-path " " (dim "changed")))
+    (log-camp-info (~a "  " (dim (current-time-str)) "  " (cyan "●") " " rel-path " " (dim "changed")))
 
     (define-values (result rebuild-ms)
       (with-timing
         (case change-type
           [(config)
-           (displayln (~a "  " (dim "Reloading site config...")))
+           (log-camp-info (~a "  " (dim "Reloading site config...")))
            ((unbox stop-watcher))
            (with-handlers ([exn:fail?
                             (λ (e)
-                              (displayln (~a "  " (red "✗") " Config error: " (exn-message e)))
+                              (log-camp-info (~a "  " (red "✗") " Config error: " (exn-message e)))
                               #f)])
              (reload-site!)
              (start-watching!)
              (do-rebuild!))]
 
           [(static)
-           (displayln (~a "  " (dim "Syncing static files...")))
+           (log-camp-info (~a "  " (dim "Syncing static files...")))
            (do-static-sync!)]
 
           [(rkt)
-           (displayln (~a "  " (dim "Reloading modules...")))
+           (log-camp-info (~a "  " (dim "Reloading modules...")))
            (rerequire-render-modules!)
-           (displayln (~a "  " (dim "Rebuilding...")))
+           (log-camp-info (~a "  " (dim "Rebuilding...")))
            (do-rebuild!)]
 
           [(source)
-           (displayln (~a "  " (dim "Rebuilding...")))
+           (log-camp-info (~a "  " (dim "Rebuilding...")))
            (do-rebuild!)]
 
           [else
-           (displayln (~a "  " (dim "Rebuilding...")))
+           (log-camp-info (~a "  " (dim "Rebuilding...")))
            (do-rebuild!)])))
 
     (when result
-      (displayln (~a "  " (green "✓") " Done " (dim (format-duration rebuild-ms))))))
+      (log-camp-info (~a "  " (green "✓") " Done " (dim (format-duration rebuild-ms))))))
 
   (define (make-relative-path p)
     (define root (site-root current-site))
@@ -383,15 +355,12 @@
     (start-watching!))
 
   (define (cleanup!)
-    (displayln "")
-    (displayln (~a "  " (dim "Shutting down...")))
+    (log-camp-info (~a "  " (dim "Shutting down...")))
     ((unbox stop-watcher))
     (shutdown-server)
-    (kill-thread log-thread)
     (when (and manifest-path (file-exists? manifest-path))
       (delete-file manifest-path))
-    (displayln (~a "  " (green "✓") " Server stopped"))
-    (displayln ""))
+    (log-camp-info (~a "  " (green "✓") " Server stopped")))
 
   (with-handlers ([exn:break? (λ (e) (cleanup!))])
     (sync never-evt)))
@@ -399,80 +368,68 @@
 ;; ---------------------------------------------------------------------------
 ;; Deploy command
 
-(define (run-deploy args)
+(define (run-deploy)
   (define remaining
     (command-line
      #:program "raco camp deploy"
-     #:argv args
-     #:args ([path #f])
-     path))
+     #:argv (current-command-line-arguments)
+     #:args ([site #f])
+     site))
 
-  (define resolved-path
-    (cond
-      [remaining remaining]
-      [(file-exists? "site.rkt") "site.rkt"]
-      [else
-       (eprintf "Error: No site.rkt found in current directory.\n")
-       (eprintf "Specify a path: raco camp deploy <site-path>\n")
-       (exit 1)]))
+  (define resolved-path (resolve-site-spec/cli remaining))
 
   (define site
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (eprintf "Error loading site: ~a\n" (exn-message e))
+                       (log-camp-error (~a "Error loading site: " (exn-message e)))
                        (exit 1))])
       (load-site resolved-path)))
 
   (define deploy-script (site-deploy-script site))
 
   (unless deploy-script
-    (eprintf "Error: No deploy-script configured in site configuration.\n")
-    (eprintf "Add deploy-script = \"./deploy.sh\" to your site.rkt\n")
+    (log-camp-error "No deploy-script configured in site configuration.")
+    (log-camp-error "Add deploy-script = \"./deploy.sh\" to your site.rkt")
     (exit 1))
 
   (define root (site-root site))
   (define script-path (simplify-path (build-path root deploy-script)))
 
   (unless (file-exists? script-path)
-    (eprintf "Error: Deploy script not found: ~a\n" script-path)
+    (log-camp-error (~a "Deploy script not found: " script-path))
     (exit 1))
 
   (define output-dir
     (path->string (simplify-path (build-path root (site-output-folder site)))))
 
-  (displayln "")
-  (displayln (bold "camp deploy"))
-  (displayln "")
-  (displayln (~a "  " (dim "Running") " " deploy-script " " output-dir))
-  (displayln "")
+  (log-camp-info (bold "camp deploy"))
+  (log-camp-info (~a "  " (dim "Running") " " deploy-script " " output-dir))
 
   (define exit-code
     (parameterize ([current-directory root])
       (apply system*/exit-code script-path (list output-dir))))
 
-  (displayln "")
   (if (zero? exit-code)
-      (displayln (~a "  " (green "✓") " " (bold "Deploy complete")))
-      (displayln (~a "  " (red "✗") " " (bold "Deploy failed") " (exit code " exit-code ")")))
-  (displayln "")
+      (log-camp-info (~a "  " (green "✓") " " (bold "Deploy complete")))
+      (log-camp-info (~a "  " (red "✗") " " (bold "Deploy failed") " (exit code " exit-code ")")))
 
   (exit exit-code))
 
 ;; ---------------------------------------------------------------------------
 ;; New command
 
-(define (run-new args)
+(define (run-new)
   (define name
     (command-line
      #:program "raco camp new"
-     #:argv args
+     #:argv (current-command-line-arguments)
      #:args (name)
      name))
 
   ;; Validate name is a valid Racket identifier (roughly)
   (unless (regexp-match? #rx"^[a-z][a-z0-9-]*$" name)
-    (eprintf "Error: Invalid site name '~a'\n" name)
-    (eprintf "Name must start with a letter and contain only lowercase letters, numbers, and hyphens.\n")
+    (log-camp-error (~a "Invalid site name '" name "'"))
+    (log-camp-error "Name must start with a letter and contain only lowercase letters, numbers, and hyphens.")
     (exit 1))
 
   (define target-dir (build-path (current-directory) name))
@@ -480,59 +437,27 @@
   ;; Check if directory already exists
   (when (or (directory-exists? target-dir)
             (file-exists? target-dir))
-    (eprintf "Error: '~a' already exists.\n" name)
-    (eprintf "Choose a different name or remove the existing directory.\n")
+    (log-camp-error (~a "'" name "' already exists."))
+    (log-camp-error "Choose a different name or remove the existing directory.")
     (exit 1))
-
-  (displayln "")
-  (displayln (bold "camp new"))
-  (displayln "")
 
   (with-handlers ([exn:fail?
                    (λ (e)
-                     (eprintf "  ~a Error: ~a\n" (red "✗") (exn-message e))
+                     (log-camp-error (~a (red "✗") " Error: " (exn-message e)))
                      (exit 1))])
     (create-new-site target-dir name))
 
-  (displayln (~a "  " (green "✓") " Created " (bold name)))
-  (displayln "")
-  (displayln (~a "  " (dim "Next steps:")))
-  (displayln (~a "    cd " name))
-  (displayln "    raco pkg install")
-  (displayln "    raco camp build")
-  (displayln "    raco camp serve")
-  (displayln ""))
-
-;; ---------------------------------------------------------------------------
-;; Serve log formatting
-
-(define (colorize-modern-log msg)
-  (define parts (string-split msg " "))
-  (cond
-    [(>= (length parts) 4)
-     (define time (car parts))
-     (define method (cadr parts))
-     (define status-str (last parts))
-     (define path (string-join (drop-right (cddr parts) 1) " "))
-     (define status (string->number status-str))
-     (~a (dim time) "  "
-         (cyan (~a method #:min-width 4)) "  "
-         (~a path #:min-width 30) "  "
-         (format-status-code status))]
-    [else msg]))
-
-(define (format-status-code code)
-  (cond
-    [(not code) (dim "???")]
-    [(< code 300) (~a (green "●") " " (green (~a code)))]
-    [(< code 400) (~a (dim "●") " " (dim (~a code)))]
-    [(< code 500) (~a (yellow "●") " " (yellow (~a code)))]
-    [else (~a (red "●") " " (red (~a code)))]))
+  (log-camp-info (~a "  " (green "✓") " Created " (bold name)))
+  (log-camp-info (~a "  " (dim "Next steps:")))
+  (log-camp-info (~a "    cd " name))
+  (log-camp-info "    raco pkg install")
+  (log-camp-info "    raco camp build")
+  (log-camp-info "    raco camp serve"))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Helpers
 
-(define (print-phase-line phase-name desc timing-ms)
+(define (log-phase-line phase-name desc timing-ms)
   (define bullet (cyan "●"))
   (define phase (~a phase-name #:min-width 10))
   (define description (dim desc))
@@ -542,12 +467,12 @@
   (define prefix-len (+ 2 1 1 10 (string-length desc)))
   (define padding (max 1 (- LINE-WIDTH prefix-len (string-length (format-duration (or timing-ms 0))))))
 
-  (displayln (~a "  " bullet " " phase description
-                 (make-string padding #\space)
-                 timing)))
+  (log-camp-info (~a "  " bullet " " phase description
+                     (make-string padding #\space)
+                     timing)))
 
-(define (print-error context msg)
-  (eprintf "\n  ~a Error ~a: ~a\n" (red "✗") context msg))
+(define (log-error context msg)
+  (log-camp-error (~a "\n  " (red "✗") " Error " context ": " msg)))
 
 (define (format-count-desc count1 noun1 count2 noun2)
   (~a (pluralize count1 noun1) " in " (pluralize count2 noun2)))

@@ -68,6 +68,9 @@
   (check-true (file-exists? (build-path site-dir "blog" "welcome.md.rkt"))
               "should create blog/welcome.md.rkt")
 
+  (check-true (file-exists? (build-path site-dir "main.rkt"))
+              "should create main.rkt")
+
   ;; Check info.rkt has correct collection name
   (define info-content (file->string (build-path site-dir "info.rkt")))
   (check-regexp-match (regexp (format "collection \"~a\"" site-name))
@@ -78,7 +81,24 @@
   (define site-content (file->string (build-path site-dir "site.rkt")))
   (check-regexp-match (regexp (format "~a/render" site-name))
                       site-content
-                      "site.rkt should reference render module"))
+                      "site.rkt should reference render module")
+
+  ;; Check main.rkt provides camp bindings
+  (define main-content (file->string (build-path site-dir "main.rkt")))
+  (check-regexp-match #rx"all-from-out camp"
+                      main-content
+                      "main.rkt should re-export camp")
+
+  ;; Check source files use #lang punct with site name
+  (define post-content (file->string (build-path site-dir "blog" "first-post.md.rkt")))
+  (check-regexp-match (regexp (format "#lang punct ~a" site-name))
+                      post-content
+                      "blog posts should use #lang punct <sitename>")
+
+  (define page-content (file->string (build-path site-dir "pages" "index.md.rkt")))
+  (check-regexp-match (regexp (format "#lang punct ~a" site-name))
+                      page-content
+                      "pages should use #lang punct <sitename>"))
 
 ;; ---------------------------------------------------------------------------
 ;; Test: existing directory produces error

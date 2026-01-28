@@ -1,4 +1,4 @@
-#lang punct
+#lang punct @name
 
 ---
 title: My First Post

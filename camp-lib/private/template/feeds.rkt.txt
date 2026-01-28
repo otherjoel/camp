@@ -4,5 +4,5 @@
 
 (provide feed-content)
 
-(define (feed-content doc)
+(define (feed-content doc context)
   `(article ,@"@"(document-body doc)))
