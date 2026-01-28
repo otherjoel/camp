@@ -23,16 +23,19 @@
 (define (gen-render.rkt name)
   (include-template "template/render.rkt.txt"))
 
-(define (gen-index.md.rkt)
+(define (gen-main.rkt name)
+  (include-template "template/main.rkt.txt"))
+
+(define (gen-index.md.rkt name)
   (include-template "template/pages/index.md.rkt.txt"))
 
 (define (gen-feeds.rkt)
   (include-template "template/feeds.rkt.txt"))
 
-(define (gen-first-post.md.rkt founded)
+(define (gen-first-post.md.rkt name founded)
   (include-template "template/blog/first-post.md.rkt.txt"))
 
-(define (gen-welcome.md.rkt earlier-date)
+(define (gen-welcome.md.rkt name earlier-date)
   (include-template "template/blog/welcome.md.rkt.txt"))
 
 ;; Create a new site in the given directory
@@ -61,8 +64,12 @@
     (λ (out) (display (gen-render.rkt name) out))
     #:exists 'error)
 
+  (call-with-output-file (build-path target-dir "main.rkt")
+    (λ (out) (display (gen-main.rkt name) out))
+    #:exists 'error)
+
   (call-with-output-file (build-path target-dir "pages" "index.md.rkt")
-    (λ (out) (display (gen-index.md.rkt) out))
+    (λ (out) (display (gen-index.md.rkt name) out))
     #:exists 'error)
 
   (call-with-output-file (build-path target-dir "feeds.rkt")
@@ -70,11 +77,11 @@
     #:exists 'error)
 
   (call-with-output-file (build-path target-dir "blog" "first-post.md.rkt")
-    (λ (out) (display (gen-first-post.md.rkt founded) out))
+    (λ (out) (display (gen-first-post.md.rkt name founded) out))
     #:exists 'error)
 
   (call-with-output-file (build-path target-dir "blog" "welcome.md.rkt")
-    (λ (out) (display (gen-welcome.md.rkt earlier-date) out))
+    (λ (out) (display (gen-welcome.md.rkt name earlier-date) out))
     #:exists 'error)
 
   ;; Copy static files (no templating needed)

@@ -3,6 +3,7 @@
 (define deps '("base" "camp-lib"))
 (define implies '("camp-lib"))
 (define scribblings '(("scribblings/camp.scrbl" (multi-page))))
+(define compile-omit-paths '("scribblings/mysite"))
 (define pkg-desc "Docs for Camp")
 (define version "1.0")
 (define pkg-authors '("Joel Dueck"))
