@@ -4,6 +4,7 @@
          racket/list
          racket/match
          racket/path
+         racket/rerequire
          racket/string
          punct/fetch
          punct/doc
@@ -63,7 +64,7 @@
      (values
       (lambda (idx)
         (define p (list-ref paths idx))
-        (define doc (get-doc p))
+        (define doc (begin (dynamic-rerequire p) (dynamic-require p 'doc)))
         (define slug (or (meta-ref doc 'slug)
                          (path->slug p source-extension)))
         (values p slug doc))
