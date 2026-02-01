@@ -48,7 +48,7 @@
 (define (is-source-file? path site)
   (define source-ext (site-sources site))
   (define root (site-root site))
-  (and (path-has-extension? path (string->bytes/utf-8 source-ext))
+  (and (is-source? path source-ext)
        (for/or ([coll (in-list (site-collections site))])
          (define source-dir (build-path root (source-pattern->directory (collection-source coll))))
          (path-prefix? path source-dir))))

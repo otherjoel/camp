@@ -45,11 +45,16 @@
 ;; Wrong extension
 (check-false (is-source? "foo.txt" ".md.rkt"))
 (check-false (is-source? "foo.rkt" ".md.rkt"))
-(check-false (is-source? "foo.page.rkt" ".md.rkt"))
+
+;; .page.rkt is always recognized regardless of configured extension
+(check-true (is-source? "foo.page.rkt" ".md.rkt"))
+(check-true (is-source? "bar.page.rkt" ".txt.rkt"))
+(check-true (is-source? "pages/about.page.rkt" ".md.rkt"))
 
 ;; Emacs backup files should be excluded
 (check-false (is-source? ".#foo.md.rkt" ".md.rkt"))
 (check-false (is-source? "blog/.#foo.md.rkt" ".md.rkt"))
+(check-false (is-source? ".#foo.page.rkt" ".md.rkt"))
 
 ;; ---------------------------------------------------------------------------
 ;; path->slug tests

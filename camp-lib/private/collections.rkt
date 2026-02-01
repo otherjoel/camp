@@ -33,8 +33,10 @@
 ;; Source File Detection
 
 (define (is-source? p source-extension)
-  (and (path-has-extension? p (string->bytes/utf-8 source-extension))
-       (not (regexp-match? #rx#"\\.#" (if (path? p) (path->bytes p) p)))))
+  (define path-bytes (if (path? p) (path->bytes p) p))
+  (and (or (path-has-extension? p (string->bytes/utf-8 source-extension))
+           (path-has-extension? p #".page.rkt"))
+       (not (regexp-match? #rx#"\\.#" path-bytes))))
 
 ;; ---------------------------------------------------------------------------
 ;; Source File Discovery

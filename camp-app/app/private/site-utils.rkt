@@ -9,7 +9,8 @@
          racket/path
          racket/string
          racket/vector
-         camp/app/private/gui)
+         camp/app/private/gui
+         (only-in camp/private/collections is-source?))
 
 (provide (all-from-out camp) ; includes resolve-site-spec
          source-pattern->directory
@@ -52,8 +53,7 @@
 (define (get-pages-for-directory folder source-ext)
   (for/list ([p (in-list (directory-list folder #:build? #t))]
              #:when (and (file-exists? p)
-                         (path-has-extension? p (string->bytes/utf-8 source-ext))
-                         (not (regexp-match? #rx#"\\.#" (path->bytes p)))))
+                         (is-source? p source-ext)))
     (define doc (get-doc/safe p))
     (vector (or (meta-ref doc 'date) "")
             (or (meta-ref doc 'title) "Untitled")
