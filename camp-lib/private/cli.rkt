@@ -9,6 +9,7 @@
          racket/logging
          racket/match
          racket/path
+         racket/port
          racket/rerequire
          racket/string
          racket/system
@@ -18,6 +19,7 @@
          "serve.rkt"
          "watch.rkt"
          "structs.rkt"
+         "draft.rkt"
          (only-in "output.rkt" format-duration with-timing count-files-in-directory)
          "log.rkt"
          "new-site.rkt")
@@ -43,6 +45,7 @@
          ["serve" (with-logging-to-stderr run-serve)]
          ["deploy" (with-logging-to-stderr run-deploy)]
          ["new" (with-logging-to-stderr run-new)]
+         ["draft" (with-logging-to-stderr run-draft)]
          ["help" (show-usage)]
          [_ (eprintf "Unknown command: ~a\n" cmd)
             (show-usage)
@@ -61,6 +64,7 @@
   (displayln "    --no-watch                  Disable file watching")
   (displayln "    --apache-log                Use Apache combined log format")
   (displayln "  deploy [site]                 Run deploy script")
+  (displayln "  draft [collection] [site]     Create new draft post")
   (displayln "  new <name>                    Create new site from template")
   (displayln "  help                          Show this help")
   (displayln "")
@@ -453,6 +457,77 @@
   (log-camp-info "    raco pkg install")
   (log-camp-info "    raco camp build")
   (log-camp-info "    raco camp serve"))
+
+;; ---------------------------------------------------------------------------
+;; Draft command
+
+(define (run-draft)
+  (define-values (collection-arg site-arg)
+    (command-line
+     #:program "raco camp draft"
+     #:argv (current-command-line-arguments)
+     #:args ([collection #f] [site #f])
+     (values collection site)))
+
+  ;; Determine if first arg is collection or site
+  (define-values (coll-name site-spec)
+    (cond
+      [(and collection-arg site-arg)
+       (values collection-arg site-arg)]
+      [(and collection-arg (or (file-exists? collection-arg)
+                               (resolve-site-spec collection-arg)))
+       (values #f collection-arg)]
+      [else
+       (values collection-arg #f)]))
+
+  (define resolved-path (resolve-site-spec/cli site-spec))
+
+  (define site
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (log-camp-error (~a "Error loading site: " (exn-message e)))
+                       (exit 1))])
+      (load-site resolved-path)))
+
+  (define collections (site-collections site))
+  (when (null? collections)
+    (log-camp-error "Site has no collections defined.")
+    (exit 1))
+
+  (define coll
+    (if coll-name
+        (or (findf (λ (c) (equal? (collection-name c) coll-name)) collections)
+            (begin
+              (log-camp-error (~a "Collection not found: " coll-name))
+              (log-camp-error (~a "Available: " (string-join (map collection-name collections) ", ")))
+              (exit 1)))
+        (car collections)))
+  
+  (displayln (~a "  " (dim "Collection:") " " (collection-name coll)))
+  (display "  Title: ")
+  
+  (define title (read-line (current-input-port) 'any))
+
+  (when (or (eof-object? title) (string=? (string-trim title) ""))
+    (log-camp-error "Title cannot be empty.")
+    (exit 1))
+
+  (define file-path
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (log-camp-error (~a "Error creating draft: " (exn-message e)))
+                       (exit 1))])
+      (create-draft site (string-trim title) #:collection (collection-name coll))))
+
+  (define rel-path
+    (find-relative-path (site-root site) file-path))
+
+  (log-camp-info (~a "  " (green "✓") " Created " (bold (path->string rel-path))))
+
+  (define editor (getenv "EDITOR"))
+  (when editor
+    (log-camp-info (~a "  " (dim "Opening in") " " editor))
+    (system* (find-executable-path editor) (path->string file-path))))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Helpers
