@@ -4,7 +4,10 @@
                "camp-lib"
                "gregor-lib"
                "rackunit-lib"))
-(define build-deps '())
+(define build-deps '("punct-lib"
+                     "splitflap-lib"
+                     "toml-config-lib"
+                     ))
 (define pkg-desc "Tests for Camp")
 (define version "0.0")
 (define pkg-authors '("Joel Dueck"))

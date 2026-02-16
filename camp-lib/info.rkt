@@ -1,9 +1,10 @@
 #lang info
 (define collection "camp")
-(define deps '("base"
+(define deps '("mime-type-lib"
+               "base"
                "gregor-lib"
                "hash-view-lib"
-               "html-printer"
+               "html-printer-lib"
                "punct-lib"
                "splitflap-lib"
                "toml-config-lib"

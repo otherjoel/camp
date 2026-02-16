@@ -1,6 +1,8 @@
 #lang info
 (define collection "camp")
-(define deps '("base"
+(define deps '("net-lib"
+               "punct-lib"
+               "base"
                "camp-lib"
                "gui-easy-lib"
                "gui-lib"))
