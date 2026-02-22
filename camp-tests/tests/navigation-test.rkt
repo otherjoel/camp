@@ -1,17 +1,13 @@
 #lang racket/base
 
 ;; Tests for prev/next navigation functions
-;;
-;; Tests the convenience functions prev and next that extract
-;; adjacent pages from a render context.
 
 (require rackunit
          racket/list
          racket/path
-         (except-in camp prev next)  ; exclude contracted versions
+         (except-in camp prev next)
          camp/build
-         (only-in camp/private/main prev next)  ; without contracts for mock testing
-         (only-in camp/private/build build-context))
+         (only-in camp/private/main prev next))
 
 ;; ---------------------------------------------------------------------------
 ;; Test fixture paths
@@ -25,104 +21,99 @@
   (build-path fixture-site-root "site.rkt"))
 
 ;; ---------------------------------------------------------------------------
-;; Helper: create a mock context with given prev/next procedures
+;; Unit tests with mock site-info
 
-(define (make-mock-context #:prev [prev-proc (λ args #f)]
-                           #:next [next-proc (λ args #f)])
-  (hasheq 'slug "test-slug"
-          'url "/test/"
-          'collection "test"
-          'prev prev-proc
-          'next next-proc
-          'taxonomies (hasheq)))
+(define pl-a (page-link "/a/" "A" (hasheq 'slug "a")))
+(define pl-b (page-link "/b/" "B" (hasheq 'slug "b")))
+(define pl-c (page-link "/c/" "C" (hasheq 'slug "c")))
 
-;; ---------------------------------------------------------------------------
-;; prev tests (using private module to test argument passing without contract)
+(define mock-info
+  (site-info '() ; pages
+             (hasheq "blog" (hasheq "tags" (hasheq "alpha" (list pl-a pl-b)
+                                                   "beta"  (list pl-b pl-c))))
+             (hasheq) ; page-index
+             (hasheq "blog" (hasheq "tags" (hasheq "alpha" (list pl-a pl-b)
+                                                   "beta"  (list pl-b pl-c))))
+             (hasheq "blog" (list pl-a pl-b pl-c))  ; pages-by-collection
+             (hasheq "blog" (list pl-a pl-b pl-c))  ; page-links-by-collection
+             (hasheq)))                              ; page-by-slug
 
-(test-case "prev: calls context's prev procedure with no args"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:prev (λ args (set! called-with args) mock-page)))
-  (define result (prev ctx))
-  (check-equal? called-with '())
-  (check-equal? result mock-page))
+(define (make-ctx slug #:taxonomies [taxonomies (hasheq)])
+  (hasheq 'slug slug
+          'url (string-append "/" slug "/")
+          'collection "blog"
+          'taxonomies taxonomies))
 
-(test-case "prev: passes taxonomy key when provided"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:prev (λ args (set! called-with args) mock-page)))
-  (define result (prev ctx "tags"))
-  (check-equal? called-with '("tags"))
-  (check-equal? result mock-page))
+(test-case "prev: returns previous page in collection"
+  (parameterize ([current-site-info mock-info])
+    (check-equal? (prev (make-ctx "b")) pl-a)
+    (check-equal? (prev (make-ctx "c")) pl-b)))
 
-(test-case "prev: passes taxonomy key and term when provided"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:prev (λ args (set! called-with args) mock-page)))
-  (define result (prev ctx "tags" "emacs"))
-  (check-equal? called-with '("tags" "emacs"))
-  (check-equal? result mock-page))
+(test-case "prev: returns #f at start of collection"
+  (parameterize ([current-site-info mock-info])
+    (check-false (prev (make-ctx "a")))))
 
-(test-case "prev: returns #f when context procedure returns #f"
-  (define ctx (make-mock-context #:prev (λ args #f)))
-  (check-false (prev ctx)))
+(test-case "next: returns next page in collection"
+  (parameterize ([current-site-info mock-info])
+    (check-equal? (next (make-ctx "a")) pl-b)
+    (check-equal? (next (make-ctx "b")) pl-c)))
 
-;; ---------------------------------------------------------------------------
-;; next tests
+(test-case "next: returns #f at end of collection"
+  (parameterize ([current-site-info mock-info])
+    (check-false (next (make-ctx "c")))))
 
-(test-case "next: calls context's next procedure with no args"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:next (λ args (set! called-with args) mock-page)))
-  (define result (next ctx))
-  (check-equal? called-with '())
-  (check-equal? result mock-page))
+(test-case "prev: navigates within taxonomy using first term"
+  (parameterize ([current-site-info mock-info])
+    ;; b has tags alpha, beta; first is alpha. Within alpha: a, b
+    (define ctx (make-ctx "b" #:taxonomies (hasheq "tags" '("alpha" "beta"))))
+    (check-equal? (prev ctx "tags") pl-a)))
 
-(test-case "next: passes taxonomy key when provided"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:next (λ args (set! called-with args) mock-page)))
-  (define result (next ctx "tags"))
-  (check-equal? called-with '("tags"))
-  (check-equal? result mock-page))
+(test-case "next: navigates within taxonomy using first term"
+  (parameterize ([current-site-info mock-info])
+    ;; b has tags beta, alpha; first is beta. Within beta: b, c
+    (define ctx (make-ctx "b" #:taxonomies (hasheq "tags" '("beta" "alpha"))))
+    (check-equal? (next ctx "tags") pl-c)))
 
-(test-case "next: passes taxonomy key and term when provided"
-  (define called-with #f)
-  (define mock-page (page-link "/test/" "Test" (hasheq 'slug "test")))
-  (define ctx (make-mock-context
-               #:next (λ args (set! called-with args) mock-page)))
-  (define result (next ctx "tags" "emacs"))
-  (check-equal? called-with '("tags" "emacs"))
-  (check-equal? result mock-page))
+(test-case "prev: navigates within specific taxonomy term"
+  (parameterize ([current-site-info mock-info])
+    ;; Within beta: b, c. prev of c in beta = b
+    (define ctx (make-ctx "c" #:taxonomies (hasheq "tags" '("beta"))))
+    (check-equal? (prev ctx "tags" "beta") pl-b)))
 
-(test-case "next: returns #f when context procedure returns #f"
-  (define ctx (make-mock-context #:next (λ args #f)))
-  (check-false (next ctx)))
+(test-case "next: navigates within specific taxonomy term"
+  (parameterize ([current-site-info mock-info])
+    ;; Within alpha: a, b. next of a in alpha = b
+    (define ctx (make-ctx "a" #:taxonomies (hasheq "tags" '("alpha"))))
+    (check-equal? (next ctx "tags" "alpha") pl-b)))
+
+(test-case "prev/next: returns #f when no site-info available"
+  (parameterize ([current-site-info #f])
+    (check-false (prev (make-ctx "b")))
+    (check-false (next (make-ctx "b")))))
+
+(test-case "prev/next: returns #f for unknown taxonomy"
+  (parameterize ([current-site-info mock-info])
+    (define ctx (make-ctx "b" #:taxonomies (hasheq)))
+    (check-false (prev ctx "nonexistent"))
+    (check-false (next ctx "nonexistent"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Integration tests with real site fixture
 
 (define (call-with-built-context target-slug thunk)
-  ;; Build the site and find the context for the given page
   (define site (load-site fixture-site-path))
   (define info (collect site))
   (parameterize ([current-site-info info])
-    ;; Find the page and build its context
     (define pg
       (for/or ([p (site-info-pages info)])
         (and (equal? (page-slug p) target-slug) p)))
     (unless pg
       (error 'call-with-built-context "page not found: ~a" target-slug))
-    ;; Build context using internal functions (for testing)
     (define coll-name (page-collection-name pg))
     (define taxonomy-index (site-info-taxonomy-index info))
     (define page-links-by-coll (site-info-page-links-by-collection info))
-    (define ctx (build-context pg coll-name taxonomy-index page-links-by-coll))
+    (define ctx ((dynamic-require 'camp/private/build 'build-context)
+                 pg coll-name taxonomy-index page-links-by-coll))
     (thunk ctx)))
 
 (test-case "integration: prev returns previous page in collection"

@@ -466,8 +466,6 @@
                         (format "~a/~a/~a" (page-slug page) page-slug-str page-num))
               'url current-url
               'collection (page-collection-name page)
-              'prev (λ args #f)  ; paginated pages don't have collection prev/next
-              'next (λ args #f)
               'taxonomies (hash)))
 
     ;; Render through normal render function
@@ -494,19 +492,14 @@
 ;; ---------------------------------------------------------------------------
 ;; Context Building
 
-(define (build-context p coll-name taxonomy-index page-links-by-coll)
+(define (build-context p coll-name taxonomy-index _page-links-by-coll)
   (define slug (page-slug p))
   (define url (output-path->url (page-output-path p)))
   (define doc (page-doc p))
-  (define coll-pages (hash-ref page-links-by-coll coll-name '()))
   (define page-taxonomies (build-page-taxonomies doc taxonomy-index coll-name))
-  (define prev-proc (make-nav-proc prev-in slug coll-name coll-pages page-taxonomies taxonomy-index))
-  (define next-proc (make-nav-proc next-in slug coll-name coll-pages page-taxonomies taxonomy-index))
   (hasheq 'slug slug
           'url url
           'collection coll-name
-          'prev prev-proc
-          'next next-proc
           'taxonomies page-taxonomies))
 
 (define (build-page-taxonomies doc taxonomy-index coll-name)
@@ -516,23 +509,3 @@
       (for/hash ([(tax-key _term-hash) (in-hash coll-taxes)])
         (define raw-val (meta-ref doc (string->symbol tax-key)))
         (values tax-key (normalize-taxonomy-value raw-val)))))
-
-(define (make-nav-proc nav-fn slug coll-name coll-pages page-taxonomies taxonomy-index)
-  (λ args
-    (match args
-      ['()
-       (nav-fn coll-pages slug)]
-      [(list taxonomy-key)
-       (define terms (hash-ref page-taxonomies taxonomy-key '()))
-       (if (null? terms)
-           #f
-           (let ([term-pages (get-taxonomy-term-pages taxonomy-index coll-name taxonomy-key (car terms))])
-             (nav-fn term-pages slug)))]
-      [(list taxonomy-key term)
-       (define term-pages (get-taxonomy-term-pages taxonomy-index coll-name taxonomy-key term))
-       (nav-fn term-pages slug)])))
-
-(define (get-taxonomy-term-pages taxonomy-index coll-name taxonomy-key term)
-  (define coll-taxes (hash-ref taxonomy-index coll-name (hasheq)))
-  (define term-hash (hash-ref coll-taxes taxonomy-key (hash)))
-  (hash-ref term-hash term '()))

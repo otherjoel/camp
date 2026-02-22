@@ -89,8 +89,6 @@
   (slug
    url
    collection
-   prev   ; procedure: () -> page-link?, (taxonomy) -> page-link?, (taxonomy term) -> page-link?
-   next   ; procedure: same calling conventions as prev
    taxonomies))
 
 ;; ---------------------------------------------------------------------------

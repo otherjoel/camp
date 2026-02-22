@@ -76,22 +76,16 @@
 ;; ---------------------------------------------------------------------------
 ;; Context hash-view tests
 
-(define test-prev (λ () #f))
-(define test-next (λ () #f))
 (define test-context
   (context "my-post"
            "/blog/2024/01/my-post/"
            "blog"
-           test-prev
-           test-next
            (hasheq "tags" '("emacs" "racket"))))
 
 (check-true (context? test-context))
 (check-equal? (context-slug test-context) "my-post")
 (check-equal? (context-url test-context) "/blog/2024/01/my-post/")
 (check-equal? (context-collection test-context) "blog")
-(check-equal? (context-prev test-context) test-prev)
-(check-equal? (context-next test-context) test-next)
 (check-equal? (hash-ref (context-taxonomies test-context) "tags") '("emacs" "racket"))
 
 (check-equal? (hash-ref test-context 'slug) "my-post")
@@ -153,23 +147,6 @@
 (check-true (directory-exists? (site-root loaded-site)))
 
 ;; ---------------------------------------------------------------------------
-;; prev-in / next-in tests
-;; Note: prev-in/next-in look up pages by slug (from metas), not URL
-
-(define test-pages
-  (list (page-link "/blog/a/" "A" (hasheq 'slug "a"))
-        (page-link "/blog/b/" "B" (hasheq 'slug "b"))
-        (page-link "/blog/c/" "C" (hasheq 'slug "c"))))
-
-(check-false (prev-in test-pages "a"))
-(check-equal? (prev-in test-pages "b") (car test-pages))
-(check-equal? (prev-in test-pages "c") (cadr test-pages))
-
-(check-equal? (next-in test-pages "a") (cadr test-pages))
-(check-equal? (next-in test-pages "b") (caddr test-pages))
-(check-false (next-in test-pages "c"))
-
-;; ---------------------------------------------------------------------------
 ;; ~d date formatting with auto-conversion (pattern first, like format)
 
 (define test-date (date 2025 1 15))
@@ -182,3 +159,33 @@
 ;; Also works with gregor date objects
 (check-equal? (~d "d MMM yyyy" test-date) "15 Jan 2025")
 (check-equal? (~d "EEE, MMM d" (date 2024 12 25)) "Wed, Dec 25")
+
+;; ---------------------------------------------------------------------------
+;; Path pattern predicates and format-output-path (exported from camp)
+
+;; source-path-pattern?
+(check-true (source-path-pattern? "blog/*"))
+(check-true (source-path-pattern? "*"))
+(check-false (source-path-pattern? "/absolute/*"))
+(check-false (source-path-pattern? "no-wildcard"))
+
+;; output-path-pattern?
+(check-true (output-path-pattern? "blog/*/"))
+(check-true (output-path-pattern? "blog/[yyyy]/[MM]/*/"))
+(check-false (output-path-pattern? "no-wildcard"))
+(check-false (output-path-pattern? "blog/[invalid]/*/"))
+
+;; file-extension?
+(check-true (file-extension? ".md.rkt"))
+(check-true (file-extension? ".txt"))
+(check-false (file-extension? "no-dot"))
+
+;; non-rkt-file-extension?
+(check-true (non-rkt-file-extension? ".md.rkt"))
+(check-false (non-rkt-file-extension? ".rkt"))
+
+;; format-output-path
+(check-equal? (format-output-path "posts/*/" "hello" #f)
+              (string->path "posts/hello/index.html"))
+(check-equal? (format-output-path "blog/[yyyy]/[MM]/*/" "my-post" test-date)
+              (string->path "blog/2025/01/my-post/index.html"))

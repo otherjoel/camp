@@ -219,11 +219,35 @@
 ;; ---------------------------------------------------------------------------
 ;; Context Navigation
 
-(define (prev ctx . args)
-  (apply (context-prev ctx) args))
+(define (resolve-nav-pages info ctx taxonomy-key term)
+  (define coll-name (context-collection ctx))
+  (cond
+    [(not taxonomy-key)
+     (hash-ref (site-info-page-links-by-collection info) coll-name '())]
+    [(not term)
+     (define terms (hash-ref (context-taxonomies ctx) taxonomy-key '()))
+     (if (null? terms)
+         '()
+         (taxonomy-term-pages info coll-name taxonomy-key (car terms)))]
+    [else
+     (taxonomy-term-pages info coll-name taxonomy-key term)]))
 
-(define (next ctx . args)
-  (apply (context-next ctx) args))
+(define (taxonomy-term-pages info coll-name taxonomy-key term)
+  (define coll-taxes (hash-ref (site-info-taxonomy-index info) coll-name (hasheq)))
+  (define term-hash (hash-ref coll-taxes taxonomy-key (hash)))
+  (hash-ref term-hash term '()))
+
+(define (prev ctx [taxonomy-key #f] [term #f])
+  (define info (current-site-info))
+  (and info
+       (prev-in (resolve-nav-pages info ctx taxonomy-key term)
+                (context-slug ctx))))
+
+(define (next ctx [taxonomy-key #f] [term #f])
+  (define info (current-site-info))
+  (and info
+       (next-in (resolve-nav-pages info ctx taxonomy-key term)
+                (context-slug ctx))))
 
 ;; ---------------------------------------------------------------------------
 ;; Pagination
