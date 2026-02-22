@@ -1,13 +1,46 @@
 #lang scribble/manual
 
-@require[@for-label[camp
-                    racket/base]]
+@(require (for-label camp
+                     racket/base))
 
-@title[#:style 'toc]{Camp: Simple and Configurable Static Site Generation}
+@(require racket/runtime-path
+          scribble/core
+          scribble/html-properties)
+
+@(define-runtime-path logo "camp-med.png")
+
+@title[#:style 'toc]{Camp: Static Site Generation for Racket}
 @author{Joel Dueck}
 
-Description Here
+@image[logo #:scale 0.5 #:style (style #f (list (attributes '((style . "float: right;")))))]
+
+Camp is a static site generator built on Racket. I made it for myself, but if you enjoy the craft
+and activity of web and print publishing, you might like it too. It gives you tools and techniques
+for building a site that is personal, programmable and permanent.
+
+Camp builds on @hyperlink["https://joeldueck.com/what-about/punct/"]{Punct}, a Racket DSL that lets
+you extend Markdown with Racket code, and output to HTML or Typst. 
+
+@itemlist[
+
+@item{Camp provides facilities for navigation between posts, cross references and taxonomies (such as
+tags or series).}
+
+@item{You can use Camp’s command-line interface, or its cross-platform GUI app.}
+
+@item{Camp helps you convert collections of posts into print-ready book PDFs via Typst.}
+
+@item{Camp produces spec-compliant RSS/Atom feeds. And though many may not notice, it also produces
+HTML that is line-wrapped and indented for high readability.}
+
+]
 
 @local-table-of-contents[]
 
+@include-section["quickstart.scrbl"]
+@include-section["concepts.scrbl"]
+@include-section["tutorial-blog.scrbl"]
+@include-section["tutorial-navigation.scrbl"]
+@include-section["tutorial-listings.scrbl"]
+@include-section["tutorial-book.scrbl"]
 @include-section["reference.scrbl"]
