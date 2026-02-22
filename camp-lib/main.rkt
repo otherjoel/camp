@@ -21,14 +21,11 @@
  (hash-view-out book-part)
  (hash-view-out part)
  (hash-view-out chapter)
- (struct-out page)
  (struct-out page-link)
- (struct-out site-info)
  (struct-out document)
  ;; Pagination
  (struct-out pagination)
  (struct-out paginated-content)
- current-site-info
  file-path->site-path
  resolve-site-spec
  ;; Path pattern predicates

@@ -10,8 +10,8 @@
          gregor
          splitflap
          camp
+         camp/build
          camp/private/feeds
-         camp/private/build
          camp/private/structs)
 
 ;; ---------------------------------------------------------------------------
