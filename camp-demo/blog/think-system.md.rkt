@@ -7,12 +7,12 @@ tags: music, pedagogy, skepticism
 ---
 
 I have recently been made aware of a new method of musical instruction being
-promoted in our fair town. This •define-term{Think System}, as its proponent calls
+promoted in our fair town. This •defterm{Think System}, as its proponent calls
 it, claims that children can learn to play instruments simply by *thinking*
 about the music.
 
 As someone who has spent years teaching proper
-•define-term{solfège}—the system of assigning syllables to musical
+•defterm{solfège}—the system of assigning syllables to musical
 pitches—do, re, mi, and so forth—I find this claim deeply suspect.
 
 Music requires discipline. It requires practice. One does not simply *think*

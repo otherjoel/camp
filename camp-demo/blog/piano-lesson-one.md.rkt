@@ -8,7 +8,7 @@ series: Piano Lessons
 ---
 
 For those beginning their journey with the
-•define-term{pianoforte}—the full name of the piano, from Italian meaning
+•defterm{pianoforte}—the full name of the piano, from Italian meaning
 "soft-loud," referring to the instrument's dynamic range—I offer these
 foundational principles:
 

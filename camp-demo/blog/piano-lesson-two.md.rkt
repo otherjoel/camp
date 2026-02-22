@@ -14,7 +14,7 @@ Today we shall discuss the black keys.
 
 ## Sharps and Flats
 
-The black keys represent •define-term{accidentals}: notes that are raised
+The black keys represent •defterm{accidentals}: notes that are raised
 (sharped) or lowered (flatted) from their natural pitch. Each black key has
 two names:
 
@@ -26,7 +26,7 @@ And so forth.
 ## The Chromatic Scale
 
 Play each key in succession—white and black—from C to C. This is the
-•define-term{chromatic scale}: a scale containing all twelve pitches within
+•defterm{chromatic scale}: a scale containing all twelve pitches within
 an octave, each a half-step apart.
 
 Practice this slowly. Speed will come with time.

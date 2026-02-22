@@ -20,5 +20,5 @@ our collection:
 As always, I encourage our patrons to expand their reading horizons. A
 well-read mind is a well-prepared mind.
 
-The new books will be available in the •define-term{stacks}—the shelving area
+The new books will be available in the •defterm{stacks}—the shelving area
 where books are stored, typically organized by call number—starting Monday.
