@@ -4,7 +4,6 @@
          punct/core)
 
 (provide defterm
-         define-term
          term
          page-ref
          normalize-term-name
@@ -48,8 +47,6 @@
   (define term-text (content->text content))
   (cons-to-metas-list 'terms-defined term-text)
   `(term-definition ,@content))
-
-(define define-term defterm)
 
 (define (term . content)
   `(term ,@content))
