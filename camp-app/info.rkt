@@ -13,3 +13,4 @@
 (define build-deps '())
 (define gracket-launcher-names '("Camp Computer.app"))
 (define gracket-launcher-libraries '("app.rkt"))
+(define install-collection "app/install.rkt")
