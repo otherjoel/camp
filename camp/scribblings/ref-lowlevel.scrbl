@@ -27,6 +27,25 @@ Performs the collect pass over a site. Traverses all documents in each collectio
 indexes for cross-reference resolution: a page index mapping slugs to URLs, a term index mapping
 term names to URL fragments, and taxonomy indexes for each collection.}
 
+@defproc[(collect/call-with-page [site site?]
+                                 [slug string?]
+                                 [proc (-> document? context? site? any)])
+         any]{
+Collects the site, looks up the page matching @racket[_slug], and calls @racket[_proc] with
+the page's document, @tech{render context}, and site. The @racket[current-site-info] parameter
+is set for the duration of @racket[_proc], so cross-reference functions like
+@racket[get-collection] and @racket[get-taxonomy-pages] work normally.
+
+This is useful for rendering or processing a single page with full site context without performing
+a complete @racket[build!]. The slug is matched case-insensitively. Raises an error if no page
+with the given slug exists.
+
+@codeblock|{
+(collect/call-with-page my-site "my-post"
+  (λ (doc ctx site)
+    (my-render-function doc ctx)))
+}|}
+
 @defproc[(build! [site site?] [info site-info?]) void?]{
 Performs the build pass. For each page, calls its collection's render function with the document
 and context. Render functions call @racket[camp-doc->html-xexpr] to render the body (which

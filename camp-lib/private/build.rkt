@@ -21,6 +21,7 @@
          "feeds.rkt")
 
 (provide collect
+         collect/call-with-page
          build!
          copy-static-files
          sync-static-files
@@ -63,6 +64,19 @@
 
   (site-info all-pages term-index page-index taxonomy-index
              pages-by-collection page-links-by-collection page-by-slug))
+
+(define (collect/call-with-page site slug proc)
+  (define info (collect site))
+  (define normalized (normalize-slug slug))
+  (define pg (hash-ref (site-info-page-by-slug info) normalized
+                       (λ () (error 'collect/call-with-page
+                                    "no page found with slug: ~a" slug))))
+  (define ctx (build-context pg
+                             (page-collection-name pg)
+                             (site-info-taxonomy-index info)
+                             (site-info-page-links-by-collection info)))
+  (parameterize ([current-site-info info])
+    (proc (page-doc pg) ctx site)))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Path Helpers

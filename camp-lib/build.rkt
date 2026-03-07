@@ -7,6 +7,7 @@
 
 (provide/contract
  [collect (-> site? site-info?)]
+ [collect/call-with-page (-> site? string? procedure? any)]
  [build! (-> site? site-info? void?)])
 
 (provide current-site-info
