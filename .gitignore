@@ -4,6 +4,8 @@ doc/
 .\#*
 .DS_Store
 *.swp
+*.pdf
+*.typ
 old/
 compiled/
 publish/
