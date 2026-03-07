@@ -56,4 +56,10 @@ This allows natural references like @code[#:lang "punct"]|{•page-ref{My Page}}
 with slug @racket["my-page"]. 
 
 If no content is provided, it is used as the link text; otherwise the page's title is used as the
-link text.}
+link text.
+
+Slugs should be unique across the entire site. If two pages share the same normalized slug---for
+example, pages in different collections with the same filename, or a page whose @tt{slug} meta
+overrides to match another page's slug---the later page (in collection order) silently shadows the
+earlier one in the page index. A warning is logged during the collect phase when this occurs, but
+the build is not halted.}

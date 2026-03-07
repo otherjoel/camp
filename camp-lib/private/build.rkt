@@ -59,8 +59,15 @@
       (values coll-name (map page->page-link pages))))
 
   (define page-by-slug
-    (for/hash ([p (in-list all-pages)])
-      (values (normalize-slug (page-slug p)) p)))
+    (for/fold ([h (hash)])
+              ([p (in-list all-pages)])
+      (define slug (normalize-slug (page-slug p)))
+      (when (hash-has-key? h slug)
+        (log-camp-warning "duplicate slug \"~a\": ~a supersedes ~a"
+                          slug
+                          (page-source-path p)
+                          (page-source-path (hash-ref h slug))))
+      (hash-set h slug p)))
 
   (site-info all-pages term-index page-index taxonomy-index
              pages-by-collection page-links-by-collection page-by-slug))
