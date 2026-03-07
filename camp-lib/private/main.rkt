@@ -125,10 +125,8 @@
     (error 'get-collection "no site-info available (not in build context)"))
   (define result
     (if full-docs?
-        (hash-ref (site-info-pages-by-collection info) name #f)
-        (hash-ref (site-info-page-links-by-collection info) name #f)))
-  (unless result
-    (error 'get-collection "collection not found: ~a" name))
+        (hash-ref (site-info-pages-by-collection info) name '())
+        (hash-ref (site-info-page-links-by-collection info) name '())))
   (define limited
     (if (and limit (> (length result) limit))
         (take result limit)

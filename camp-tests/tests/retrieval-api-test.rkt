@@ -91,12 +91,10 @@
    exn:fail?
    (λ () (get-collection "blog"))))
 
-(test-case "get-collection: errors for unknown collection"
+(test-case "get-collection: returns empty list for unknown collection"
   (call-with-site-info
    (λ ()
-     (check-exn
-      exn:fail?
-      (λ () (get-collection "nonexistent"))))))
+     (check-equal? (get-collection "nonexistent") '()))))
 
 ;; ===========================================================================
 ;; get-taxonomy-terms tests
