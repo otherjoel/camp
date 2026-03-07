@@ -13,6 +13,7 @@
          racket/match
          racket/path
          racket/port
+         racket/string
          racket/vector
          camp/app/private/settings
          camp/app/private/gui
@@ -173,12 +174,19 @@
   (thread
    (λ ()
      (define editor-path (obs-peek @editor))
-     (define editor
-       (if (and (string? editor-path) (not (string=? editor-path "")))
-           editor-path
-           "/usr/bin/open"))
+     (define file-arg (path->string p))
      (define-values (sp out in err)
-       (subprocess #f #f #f editor (path->string p)))
+       (cond
+         [(and (non-empty-string? editor-path)
+               (eq? (system-type 'os) 'macosx)
+               (regexp-match? #rx"\\.app$" editor-path))
+          (subprocess #f #f #f "/usr/bin/open" "-a" editor-path file-arg)]
+         [(non-empty-string? editor-path)
+          (subprocess #f #f #f editor-path file-arg)]
+         [(eq? (system-type 'os) 'macosx)
+          (subprocess #f #f #f "/usr/bin/open" file-arg)]
+         [else
+          (subprocess #f #f #f (find-executable-path "xdg-open") file-arg)]))
      (subprocess-wait sp)
      (log-msg "Opened: ~a" (file-name-from-path p))
      (close-input-port out)
@@ -398,14 +406,31 @@
      (button "Add" add-by-path)
      (button "Cancel" close!)))))
 
+(define (editor-display-name path)
+  (cond
+    [(or (not path) (and (string? path) (string=? path ""))) "System default"]
+    [(path? path) (path->string (file-name-from-path path))]
+    [else (let ([p (string->path path)]) (path->string (file-name-from-path p)))]))
+
+(define (choose-editor!)
+  (define default-dir
+    (and (eq? (system-type 'os) 'macosx)
+         (string->path "/Applications/")))
+  (define path (get-file "Choose editor" #f default-dir))
+  (when path
+    (@editor . := . (path->string path))))
+
 (define (?prefs)
   (define-values (close! closing-mixin) (make-mix-close))
+  (define @editor-label (obs-map @editor editor-display-name))
   (dialog
    #:title "Preferences"
    #:mixin closing-mixin
    (vpanel
-    (input @editor (λ (_action s) (@editor . := . s))
-           #:label "Preferred editor (path)")
+    (hpanel
+     (text @editor-label)
+     (button "Choose editor…" (λ () (choose-editor!)))
+     (button "Clear" (λ () (@editor . := . ""))))
     (button "Close" close!))))
 
 (define (current-date)
