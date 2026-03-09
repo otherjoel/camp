@@ -83,7 +83,7 @@
                              (site-info-taxonomy-index info)
                              (site-info-page-links-by-collection info)))
   (parameterize ([current-site-info info])
-    (proc (page-doc pg) ctx site)))
+    (proc (page-doc pg) ctx)))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Path Helpers

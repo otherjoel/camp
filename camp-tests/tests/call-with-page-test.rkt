@@ -29,10 +29,9 @@
   (define site (load-test-site))
   (define result
     (collect/call-with-page site "first-post"
-      (λ (doc ctx site)
+      (λ (doc ctx)
         (check-pred document? doc)
         (check-pred context? ctx)
-        (check-pred site? site)
         (check-equal? (context-slug ctx) "first-post")
         (check-equal? (context-collection ctx) "blog")
         (check-equal? (meta-ref doc 'title) "First Post")
@@ -42,7 +41,7 @@
 (test-case "collect/call-with-page: site-info is available inside proc"
   (define site (load-test-site))
   (collect/call-with-page site "first-post"
-    (λ (doc ctx site)
+    (λ (doc ctx)
       (check-not-false (current-site-info)))))
 
 (test-case "collect/call-with-page: errors on nonexistent slug"
@@ -54,5 +53,5 @@
 (test-case "collect/call-with-page: normalizes slug casing"
   (define site (load-test-site))
   (collect/call-with-page site "First-Post"
-    (λ (doc ctx site)
+    (λ (doc ctx)
       (check-equal? (meta-ref doc 'title) "First Post"))))

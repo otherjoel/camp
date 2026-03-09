@@ -29,10 +29,10 @@ term names to URL fragments, and taxonomy indexes for each collection.}
 
 @defproc[(collect/call-with-page [site site?]
                                  [slug string?]
-                                 [proc (-> document? context? site? any)])
+                                 [proc (-> document? context? any)])
          any]{
 Collects the site, looks up the page matching @racket[_slug], and calls @racket[_proc] with
-the page's document, @tech{render context}, and site. The @racket[current-site-info] parameter
+the page's document and @tech{render context}. The @racket[current-site-info] parameter
 is set for the duration of @racket[_proc], so cross-reference functions like
 @racket[get-collection] and @racket[get-taxonomy-pages] work normally.
 
@@ -41,9 +41,7 @@ a complete @racket[build!]. The slug is matched case-insensitively. Raises an er
 with the given slug exists.
 
 @codeblock|{
-(collect/call-with-page my-site "my-post"
-  (λ (doc ctx site)
-    (my-render-function doc ctx)))
+(collect/call-with-page my-site "my-post" my-render-function)
 }|}
 
 @defproc[(build! [site site?] [info site-info?]) void?]{
