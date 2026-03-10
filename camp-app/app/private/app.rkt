@@ -6,6 +6,7 @@
          camp/build
          camp/serve
          net/sendurl
+         racket/exn
          racket/gui
          racket/gui/easy
          racket/gui/easy/operator
@@ -67,7 +68,7 @@
     (log-msg "Building site...")
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (log-msg "Build error: ~a" (exn-message e)))])
+                       (log-msg "Build error:\n~a" (exn->string e)))])
       (define start-time (current-inexact-milliseconds))
       (define info (collect site))
       (build! site info)

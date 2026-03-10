@@ -3,6 +3,7 @@
 ;; Camp CLI - raco camp command dispatcher
 
 (require racket/cmdline
+         racket/exn
          racket/file
          racket/format
          racket/list
@@ -164,7 +165,7 @@
         (λ ()
           (with-handlers ([exn:fail?
                            (λ (e)
-                             (log-error "building" (exn-message e))
+                             (log-error "building" e)
                              (exit 1))])
             (build! site info)))
         #:logger camp-logger
@@ -259,7 +260,7 @@
   (define (do-rebuild!)
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (log-camp-info (~a "  " (red "✗") " Build error: " (exn-message e)))
+                       (log-camp-info (~a "  " (red "✗") " Build error:\n" (exn->string e)))
                        #f)])
       (define info (collect current-site))
       (build! current-site info)
@@ -268,7 +269,7 @@
   (define (do-static-sync!)
     (with-handlers ([exn:fail?
                      (λ (e)
-                       (log-camp-info (~a "  " (red "✗") " Static sync error: " (exn-message e)))
+                       (log-camp-info (~a "  " (red "✗") " Static sync error:\n" (exn->string e)))
                        #f)])
       (sync-static-files (get-static-dir) (get-output-dir) manifest-path)
       #t))
@@ -316,7 +317,7 @@
            ((unbox stop-watcher))
            (with-handlers ([exn:fail?
                             (λ (e)
-                              (log-camp-info (~a "  " (red "✗") " Config error: " (exn-message e)))
+                              (log-camp-info (~a "  " (red "✗") " Config error:\n" (exn->string e)))
                               #f)])
              (reload-site!)
              (start-watching!)
@@ -447,7 +448,7 @@
 
   (with-handlers ([exn:fail?
                    (λ (e)
-                     (log-camp-error (~a (red "✗") " Error: " (exn-message e)))
+                     (log-camp-error (~a (red "✗") " Error:\n" (exn->string e)))
                      (exit 1))])
     (create-new-site target-dir name))
 
@@ -546,8 +547,8 @@
                      (make-string padding #\space)
                      timing)))
 
-(define (log-error context msg)
-  (log-camp-error (~a "\n  " (red "✗") " Error " context ": " msg)))
+(define (log-error context e)
+  (log-camp-error (~a "\n  " (red "✗") " Error " context ":\n" (exn->string e))))
 
 (define (format-count-desc count1 noun1 count2 noun2)
   (~a (pluralize count1 noun1) " in " (pluralize count2 noun2)))
