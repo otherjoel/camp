@@ -69,7 +69,7 @@ Racket datum.
                (list @tt{#:title} "Page title (used in templates and page index)")
                (list @tt{#:slug} "URL slug (defaults to filename if not specified)")
                (list @tt{#:date} "Publication date (for sorting and feed inclusion)")
-               (list @tt{#:draft?} "If @racket[#t], excludes from feeds and navigation")
+               (list @tt{#:draft?} "If @racket[#t], excludes from feeds")
                (list @tt{#:output-path} "Override the collection's output path pattern"))]
 
 Any other keywords are stored in the document metadata and accessible via @racket[meta-ref].
