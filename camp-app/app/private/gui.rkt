@@ -4,11 +4,15 @@
 
 (require racket/gui
          camp/log
+         (only-in camp/private/log use-color?)
+         camp/private/ansi
          racket/class
          racket/gui/easy
          racket/gui/easy/operator
          racket/list
          racket/string)
+
+(use-color? #t)
 
 (provide dragdrop-mix
          make-mix-close
@@ -83,13 +87,48 @@
       (define mono-delta (make-object style-delta% 'change-size 11))
       (send mono-delta set-face "Menlo")
       (send mono-delta set-delta-background "Black")
-      (send mono-delta set-delta-foreground "Cyan")
+      (send mono-delta set-delta-foreground "LightGray")
 
       (define mono-style
         (send s-l find-or-create-style basic-style mono-delta))
       (send editor change-style mono-style)
+
+      ;; Style deltas for ANSI colors
+      (define (make-fg-delta color-name)
+        (define d (make-object style-delta%))
+        (send d set-delta-foreground color-name)
+        d)
+      (define bold-delta
+        (let ([d (make-object style-delta%)])
+          (send d set-delta-foreground "White")
+          (send d set-weight-on 'bold)
+          d))
+      (define style-deltas
+        (hasheq 'red     (make-fg-delta "Red")
+                'green   (make-fg-delta "Green")
+                'yellow  (make-fg-delta "Yellow")
+                'blue    (make-fg-delta "RoyalBlue")
+                'magenta (make-fg-delta "Magenta")
+                'cyan    (make-fg-delta "Cyan")
+                'white   (make-fg-delta "White")
+                'dim     (make-fg-delta "Gray")
+                'bold    bold-delta
+                'bright-green (make-fg-delta "LightGreen")
+                'bright-cyan  (make-fg-delta "LightCyan")))
+
+      (define (insert-styled str)
+        (for ([span (in-list (parse-ansi str))])
+          (define text (car span))
+          (define style (cdr span))
+          (define start (send editor last-position))
+          (send editor insert text)
+          (when style
+            (define delta (hash-ref style-deltas style #f))
+            (when delta
+              (send editor change-style delta start (send editor last-position))))))
+
       (send editor begin-allow-change)
-      (send editor insert (string-join (reverse (obs-peek @buffer))) 0)
+      (insert-styled (string-join (reverse (obs-peek @buffer))))
       (send editor end-allow-change)
 
       (define canvas
@@ -98,7 +137,8 @@
              [editor editor]))
       (begin0 canvas
               (send canvas set-canvas-background (make-object color% 0 0 0))
-              (send canvas set-context 'buffer (obs-peek @buffer))))
+              (send canvas set-context 'buffer (obs-peek @buffer))
+              (send canvas set-context 'insert-styled insert-styled)))
 
     (define/public (update v dep val)
       (case/dep dep
@@ -111,11 +151,12 @@
                       chunk)))
                  (unless (null? todo)
                    (define editor (send v get-editor))
+                   (define insert-styled (send v get-context 'insert-styled))
                    (send editor begin-edit-sequence)
                    (send editor begin-allow-change)
                    (send editor set-position (send editor last-position))
                    (for ([chunk (in-list todo)])
-                     (send editor insert chunk))
+                     (insert-styled chunk))
                    (define last-pos (send editor last-position))
                    (send editor scroll-to-position last-pos #f 'same 'end)
                    (when (> last-pos max-text-size)
