@@ -260,6 +260,17 @@
 (define (get-source idx)
   (vector-ref (vec-ref? (obs-peek @sources-in-folder) idx) fullpath))
 
+(define (delete-source p)
+  (define name (path->string (file-name-from-path p)))
+  (define confirm
+    (message-box "Delete page"
+                 (format "Delete ~a?" name)
+                 #f '(yes-no caution)))
+  (when (eq? confirm 'yes)
+    (delete-file p)
+    (log-msg "Deleted: ~a" name)
+    (trigger-refresh!)))
+
 (define (update-sorting col)
   (define cur-sort (obs-peek @source-sorting))
   (cond
@@ -270,6 +281,18 @@
     [else
      (@source-sorting . := . (cons col (cdr cur-sort)))]))
 
+(define (show-source-context-menu list-box x y)
+  (define idx (send list-box get-selection))
+  (when idx
+    (define p (get-source idx))
+    (define menu (new popup-menu%))
+    (new menu-item% [parent menu] [label "Edit"]
+         [callback (λ (_item _evt) (edit-source p))])
+    (new separator-menu-item% [parent menu])
+    (new menu-item% [parent menu] [label "Delete"]
+         [callback (λ (_item _evt) (delete-source p))])
+    (send list-box popup-menu menu x y)))
+
 (define (on-source-select evt _entries idx)
   (when idx
     (case evt
@@ -277,10 +300,24 @@
       [(select) (@source-doc-selection . := . (get-source idx))]
       [(dclick) (edit-source (get-source idx))])))
 
+(define source-table-mixin
+  (λ (%)
+    (class %
+      (super-new)
+      (define/override (on-subwindow-event receiver event)
+        (cond
+          [(and (eq? receiver this)
+                (send event button-down? 'right))
+           (show-source-context-menu this
+                                     (send event get-x)
+                                     (send event get-y))]
+          [else (super on-subwindow-event receiver event)])))))
+
 (define :source-docs-table
   (table '("Date" "Title" "Filename") @sources-in-folder
          on-source-select
          #:entry->row source-entry->row
+         #:mixin source-table-mixin
          #:column-widths '((0 120 80 150)
                            (1 300 100 600)
                            (2 200 100 300))))
