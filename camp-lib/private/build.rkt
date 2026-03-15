@@ -368,6 +368,7 @@
         (values (page-slug p) ctx)))
 
     ;; Render pages using stored contexts
+    (define generated-files (mutable-set))
     (define page-count 0)
     (for ([p (in-list pages)])
       (define coll-name (page-collection-name p))
@@ -388,7 +389,8 @@
          ;; Build paginated pages
          (set! page-count
                (+ page-count
-                  (build-paginated-page! p pagination-result render-fn output-dir info)))]
+                  (build-paginated-page! p pagination-result render-fn output-dir info
+                                         generated-files)))]
         [else
          ;; Normal page rendering
          (define html-xexpr (render-fn doc ctx))
@@ -398,16 +400,37 @@
          (call-with-output-file output-path
            (λ (out) (display html-string out))
            #:exists 'replace)
+         (set-add! generated-files (simplify-path output-path))
          (set! page-count (add1 page-count))]))
 
     (log-camp-debug "built ~a pages" page-count)
 
-    (generate-feeds! site info contexts-by-slug)))
+    (generate-feeds! site info contexts-by-slug)
+
+    ;; Remove orphaned HTML files from previous builds
+    (define static-rel
+      (and (directory-exists? static-dir)
+           (path->string (find-relative-path (site-root site) static-dir))))
+    (define (under-static? p)
+      (and static-rel
+           (let ([rel (path->string (find-relative-path output-dir p))])
+             (string-prefix? rel static-rel))))
+    (define deleted-rel-paths
+      (for/list ([p (in-directory output-dir)]
+                 #:when (and (regexp-match? #rx"\\.html$" (path->string p))
+                             (not (set-member? generated-files (simplify-path p)))
+                             (not (under-static? p))))
+        (delete-file p)
+        (define rel (find-relative-path output-dir p))
+        (log-camp-debug "deleted orphaned page: ~a" rel)
+        (path->string rel)))
+    (unless (null? deleted-rel-paths)
+      (cleanup-empty-directories output-dir deleted-rel-paths))))
 
 ;; ---------------------------------------------------------------------------
 ;; Paginated Page Building
 
-(define (build-paginated-page! page pc render-fn output-dir info)
+(define (build-paginated-page! page pc render-fn output-dir info generated-files)
   (define coll-name (paginated-content-collection-name pc))
   (define per-page (paginated-content-per-page pc))
   (define page-slug-str (paginated-content-page-slug pc))
@@ -495,7 +518,8 @@
     (define html-string (xexpr->html5 html-xexpr))
     (call-with-output-file output-path
       (λ (out) (display html-string out))
-      #:exists 'replace))
+      #:exists 'replace)
+    (set-add! generated-files (simplify-path output-path)))
 
   total-pages)
 
