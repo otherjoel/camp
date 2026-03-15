@@ -5,8 +5,12 @@
 (require camp
          camp/build
          camp/serve
+         (only-in camp/private/build sync-static-files)
+         (only-in camp/private/watch start-watcher! get-watch-paths path-change-type)
+         (only-in camp/private/output format-duration with-timing)
          net/sendurl
          racket/exn
+         racket/file
          racket/gui
          racket/gui/easy
          racket/gui/easy/operator
@@ -14,6 +18,8 @@
          racket/match
          racket/path
          racket/port
+         racket/rerequire
+         racket/runtime-path
          racket/string
          racket/vector
          camp/app/private/settings
@@ -30,6 +36,35 @@
     [(not (vector? v)) #f]
     [(zero? (vector-length v)) #f]
     [else (vector-ref v idx)]))
+
+;; ============================================================================
+;; Toolbar icons
+
+(define-runtime-path icon-new-page "icons/new-page.png")
+(define-runtime-path icon-build    "icons/build.png")
+(define-runtime-path icon-start    "icons/start.png")
+(define-runtime-path icon-stop     "icons/stop.png")
+(define-runtime-path icon-publish  "icons/publish.png")
+
+(define icon-size 32)
+
+(define (try-read-bitmap path)
+  (and (file-exists? path)
+       (let* ([src (read-bitmap path)]
+              [w (send src get-width)]
+              [h (send src get-height)]
+              [bs (get-display-backing-scale)]
+              [dest (make-bitmap icon-size icon-size #:backing-scale bs)]
+              [dc (send dest make-dc)])
+         (send dc set-smoothing 'smoothed)
+         (send dc draw-bitmap-section-smooth src 0 0 icon-size icon-size 0 0 w h)
+         dest)))
+
+(define bmp-new-page (try-read-bitmap icon-new-page))
+(define bmp-build    (try-read-bitmap icon-build))
+(define bmp-start    (try-read-bitmap icon-start))
+(define bmp-stop     (try-read-bitmap icon-stop))
+(define bmp-publish  (try-read-bitmap icon-publish))
 
 ;; ============================================================================
 ;; Core observables
@@ -97,6 +132,24 @@
 (define-values (date-col title-col file-col fullpath) (values 0 1 2 3))
 (define @source-sorting (@ (cons date-col string-ci>?)))
 
+(define month-names #("Jan" "Feb" "Mar" "Apr" "May" "Jun"
+                      "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
+
+(define (format-display-date date-val)
+  (define date-str (~a date-val))
+  (cond
+    [(regexp-match #px"^(\\d{4})-(\\d{2})-(\\d{2})" date-str)
+     => (λ (m)
+          (define month (string->number (list-ref m 2)))
+          (define day (string->number (list-ref m 3)))
+          (format "~a ~a, ~a" (vector-ref month-names (sub1 month)) day (list-ref m 1)))]
+    [else date-str]))
+
+(define (source-entry->row entry)
+  (vector (format-display-date (vector-ref entry date-col))
+          (~a (vector-ref entry title-col))
+          (~a (vector-ref entry file-col))))
+
 (define (sort-pages pages sorting)
   (define sort-key (car sorting))
   (vector-sort pages (λ (a b) ((cdr sorting) (vector-ref a sort-key) (vector-ref b sort-key)))))
@@ -114,9 +167,6 @@
 
 (define/obs @stop-server-proc #f)
 
-(define @startstop-caption
-  (obs-map @stop-server-proc
-           (λ (v) (if v "◼︎ Stop preview" "► Start preview"))))
 
 ;; ============================================================================
 ;; Server management
@@ -131,6 +181,19 @@
      (@stop-server-proc . := . #f)
      #t]
     [_ #f]))
+
+(define (rerequire-render-modules! site)
+  (for ([coll (in-list (site-collections site))])
+    (define spec (collection-render-with coll))
+    (when spec
+      (with-handlers ([exn:fail? void])
+        (dynamic-rerequire (car spec)))))
+  (for ([feed (in-list (site-feeds site))])
+    (with-handlers ([exn:fail? void])
+      (dynamic-rerequire (car (feed-config-render-with feed)))))
+  (when (site-default-render site)
+    (with-handlers ([exn:fail? void])
+      (dynamic-rerequire (car (site-default-render site))))))
 
 ;; ============================================================================
 ;; Components: Site selection
@@ -217,8 +280,8 @@
 (define :source-docs-table
   (table '("Date" "Title" "Filename") @sources-in-folder
          on-source-select
-         #:font mono-font
-         #:column-widths '((0 100 100 100)
+         #:entry->row source-entry->row
+         #:column-widths '((0 120 80 150)
                            (1 300 100 600)
                            (2 200 100 300))))
 
@@ -227,8 +290,9 @@
 
 (define button-size '(120 50))
 
-(define (toolbar-button label action)
-  (button label action
+(define (toolbar-button label action #:icon [icon #f])
+  (button (if icon (list icon label 'top) label)
+          action
           #:min-size button-size
           #:style '(multi-line)))
 
@@ -238,11 +302,51 @@
 (define (on-start-preview-click)
   (match (obs-peek @stop-server-proc)
     [#f
+     (define site (obs-peek @site))
      (define output (obs-peek @output-folder))
-     (when output
+     (when (and site output)
        (define localhost:port (format "http://localhost:~a" localhost-port))
        (log-msg "Starting preview server (port ~a)" localhost-port)
-       (@stop-server-proc . := . (start-server output #:port localhost-port #:watch? #t))
+       (define shutdown-server (start-server output #:port localhost-port #:watch? #t))
+
+       ;; File watching
+       (define site-config-path
+         (simplify-path (path->complete-path (resolve-site-spec (obs-peek @site-selection)))))
+       (define manifest-path (make-temporary-file "camp-static-~a"))
+
+       (define (handle-change changed-path)
+         (define rel (find-relative-path (site-root site) changed-path))
+         (define rel-str (if (equal? rel changed-path)
+                             (path->string (file-name-from-path changed-path))
+                             (path->string rel)))
+         (define change-type (path-change-type changed-path site site-config-path))
+         (log-msg "~a changed" rel-str)
+         (define-values (result rebuild-ms)
+           (with-timing
+             (case change-type
+               [(static)
+                (define static-dir (build-path (site-root site) (site-static-folder site)))
+                (with-handlers ([exn:fail? (λ (e) (log-msg "Static sync error:\n~a" (exn->string e)) #f)])
+                  (sync-static-files static-dir output manifest-path)
+                  #t)]
+               [(rkt)
+                (rerequire-render-modules! site)
+                (build-site!)
+                #t]
+               [else (build-site!) #t])))
+         (when result
+           (log-msg "Done (~a)" (format-duration rebuild-ms))))
+
+       (define watch-paths (get-watch-paths site site-config-path))
+       (define stop-watcher (start-watcher! watch-paths handle-change))
+
+       (@stop-server-proc . := .
+        (λ ()
+          (stop-watcher)
+          (shutdown-server)
+          (when (file-exists? manifest-path)
+            (delete-file manifest-path))))
+
        (send-url localhost:port))]
     [_ (mindful-demure-server-stop)]))
 
@@ -261,20 +365,45 @@
           (define output-folder (path->string (obs-peek @output-folder)))
           (define script-path (build-path root deploy-script))
           (define-values (sp out in err)
-            (subprocess #f #f #f (path->string script-path) output-folder))
-          (define result (port->string out))
-          (close-input-port out)
+            (parameterize ([current-directory root])
+              (subprocess #f #f 'stdout (path->string script-path) output-folder)))
           (close-output-port in)
-          (close-input-port err)
+          (for ([line (in-lines out)])
+            (log-msg "  ~a" line))
+          (close-input-port out)
           (subprocess-wait sp)
-          (log-msg "Deploy complete")))])))
+          (define exit-code (subprocess-status sp))
+          (if (zero? exit-code)
+              (log-msg "Deploy complete")
+              (log-msg "Deploy failed (exit code ~a)" exit-code))))])))
+
+(define (on-build-click)
+  (thread build-site!))
+
+(define :startstop-button
+  (button (if bmp-start (list bmp-start "Start preview" 'top) "Start preview")
+          on-start-preview-click
+          #:min-size button-size
+          #:style '(multi-line)
+          #:mixin (λ (%)
+                    (class %
+                      (super-new)
+                      (obs-observe!
+                       @stop-server-proc
+                       (λ (v)
+                         (queue-callback
+                          (λ ()
+                            (send this set-label (if v "Stop preview" "Start preview"))
+                            (define bmp (if v bmp-stop bmp-start))
+                            (when bmp (send this set-label bmp))))))))))
 
 (define :toolbar
   (hpanel
    #:stretch '(#t #f)
-   (toolbar-button "📄 New page" on-new-page-click)
-   (toolbar-button @startstop-caption on-start-preview-click)
-   (toolbar-button "🌐 Publish" on-publish-click)))
+   (toolbar-button "New page" on-new-page-click #:icon bmp-new-page)
+   (toolbar-button "Build site" on-build-click #:icon bmp-build)
+   :startstop-button
+   (toolbar-button "Publish" on-publish-click #:icon bmp-publish)))
 
 ;; ============================================================================
 ;; Components: Menu
@@ -310,16 +439,21 @@
   (define/obs @title "")
   (define/obs @date (date->string (current-date) "~Y-~m-~d"))
   (define/obs @slug "")
-  (define/obs @tags "")
+
+  ;; Determine taxonomies for the current collection
+  (define site (obs-peek @site))
+  (define folder (obs-peek @folder-selection))
+  (define coll (and site folder (folder->collection site folder)))
+  (define taxonomy-names (if coll (collection-taxonomies coll) '()))
+  (define taxonomy-obs
+    (for/list ([name (in-list taxonomy-names)])
+      (cons name (@ ""))))
 
   (define (create-page)
-    (define site (obs-peek @site))
-    (define folder (obs-peek @folder-selection))
     (when (and site folder)
       (define title (obs-peek @title))
       (define date (obs-peek @date))
       (define slug (obs-peek @slug))
-      (define tags (obs-peek @tags))
       (define actual-slug
         (if (string=? slug "")
             (string-downcase (regexp-replace* #rx"[^a-zA-Z0-9]+" title "-"))
@@ -328,13 +462,18 @@
       (define filename (string-append actual-slug source-ext))
       (define filepath (build-path folder filename))
 
+      (define taxonomy-lines
+        (for/list ([pair (in-list taxonomy-obs)]
+                   #:unless (string=? (obs-peek (cdr pair)) ""))
+          (format "~a: ~a\n" (car pair) (obs-peek (cdr pair)))))
+
       (define content
         (string-append
          "#lang punct\n"
          "---\n"
          (format "title: ~a\n" title)
          (format "date: ~a\n" date)
-         (if (string=? tags "") "" (format "tags: ~a\n" tags))
+         (apply string-append taxonomy-lines)
          "---\n\n"
          "Write your content here.\n"))
 
@@ -348,14 +487,20 @@
    #:title "New page"
    #:mixin closing-mixin
    #:size '(400 #f)
-   (vpanel
-    (input @title (λ (_action s) (@title . := . s)) #:label "Title")
-    (input @date (λ (_action s) (@date . := . s)) #:label "Date")
-    (input @slug (λ (_action s) (@slug . := . s)) #:label "Slug (optional)")
-    (input @tags (λ (_action s) (@tags . := . s)) #:label "Tags (optional)")
-    (hpanel
-     (button "Create" create-page)
-     (button "Cancel" close!)))))
+   (apply vpanel
+     (append
+       (list
+         (input @title (λ (_action s) (@title . := . s)) #:label "Title")
+         (input @date (λ (_action s) (@date . := . s)) #:label "Date")
+         (input @slug (λ (_action s) (@slug . := . s)) #:label "Slug (optional)"))
+       (for/list ([pair (in-list taxonomy-obs)])
+         (input (cdr pair)
+                (λ (_action s) ((cdr pair) . := . s))
+                #:label (format "~a (optional)" (string-titlecase (car pair)))))
+       (list
+         (hpanel
+           (button "Create" create-page)
+           (button "Cancel" close!)))))))
 
 (define (?add-site)
   (define-values (close! closing-mixin) (make-mix-close))

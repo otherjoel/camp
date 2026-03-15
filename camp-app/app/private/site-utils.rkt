@@ -15,7 +15,8 @@
 (provide (all-from-out camp) ; includes resolve-site-spec
          source-pattern->directory
          get-source-folders
-         get-pages-in-folder)
+         get-pages-in-folder
+         folder->collection)
 
 ;; ============================================================================
 ;; Path utilities
@@ -37,6 +38,13 @@
            (for/list ([coll (in-list (site-collections site))])
              (define source-pattern (collection-source coll))
              (build-path root (source-pattern->directory source-pattern))))))
+
+(define (folder->collection site folder)
+  (define root (site-root site))
+  (for/first ([coll (in-list (site-collections site))]
+              #:when (equal? (simplify-path (build-path root (source-pattern->directory (collection-source coll))))
+                             (simplify-path folder)))
+    coll))
 
 (define (get-pages-in-folder site folder)
   (define root (site-root site))

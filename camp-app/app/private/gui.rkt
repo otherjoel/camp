@@ -116,16 +116,16 @@
                 'bright-green (make-fg-delta "LightGreen")
                 'bright-cyan  (make-fg-delta "LightCyan")))
 
+      (define default-delta (make-fg-delta "LightGray"))
+
       (define (insert-styled str)
         (for ([span (in-list (parse-ansi str))])
           (define text (car span))
           (define style (cdr span))
           (define start (send editor last-position))
           (send editor insert text)
-          (when style
-            (define delta (hash-ref style-deltas style #f))
-            (when delta
-              (send editor change-style delta start (send editor last-position))))))
+          (define delta (if style (hash-ref style-deltas style default-delta) default-delta))
+          (send editor change-style delta start (send editor last-position))))
 
       (send editor begin-allow-change)
       (insert-styled (string-join (reverse (obs-peek @buffer))))
