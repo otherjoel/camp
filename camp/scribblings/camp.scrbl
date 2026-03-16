@@ -26,7 +26,7 @@ you extend Markdown with Racket code, and output to HTML or Typst.
 @item{Camp provides facilities for navigation between posts, cross references and taxonomies (such as
 tags or series).}
 
-@item{You can use Camp’s command-line interface, or its cross-platform GUI app.}
+ @item{You can use Camp via the CLI, or via @secref["gui-app"].}
 
 @item{Camp helps you convert collections of posts into print-ready book PDFs via Typst.}
 
@@ -43,4 +43,5 @@ HTML that is line-wrapped and indented for high readability.}
 @include-section["tutorial-navigation.scrbl"]
 @include-section["tutorial-listings.scrbl"]
 @include-section["tutorial-book.scrbl"]
+@include-section["camp-app.scrbl"]
 @include-section["reference.scrbl"]

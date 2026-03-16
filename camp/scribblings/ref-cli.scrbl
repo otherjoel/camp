@@ -94,9 +94,7 @@ Configure it in your site:
 deploy-script = "./deploy.sh"
 }
 
-@section[#:tag "cli-new"]{raco camp new}
-
-@commandline{raco camp new <name>}
+@section[#:tag "cli-new"]{@tt{raco camp new}}
 
 Creates a new site from the built-in template. The @tt{<name>} argument specifies the directory
 to create.
@@ -107,6 +105,8 @@ for customization rather than a production-ready theme.
 
 After creating a site, install it as a local package and build:
 
-@commandline{cd <name>}
-@commandline{raco pkg install}
-@commandline{raco camp serve}
+@terminal{
+@:>{cd <name>}
+@:>{raco pkg install}
+@:>{raco camp serve}
+}
