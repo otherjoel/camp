@@ -35,7 +35,8 @@
 (define (is-source? p source-extension)
   (define path-bytes (if (path? p) (path->bytes p) p))
   (and (or (path-has-extension? p (string->bytes/utf-8 source-extension))
-           (path-has-extension? p #".page.rkt"))
+           (path-has-extension? p #".page.rkt")
+           (path-has-extension? p #".md.rkt"))
        (not (regexp-match? #rx#"\\.#" path-bytes))))
 
 ;; ---------------------------------------------------------------------------
@@ -53,8 +54,12 @@
 (define (path->slug p source-extension)
   (define as-path (if (path? p) p (string->path p)))
   (define filename (path->string (file-name-from-path as-path)))
-  (define ext-pattern (regexp-quote source-extension))
-  (regexp-replace (regexp (string-append ext-pattern "$")) filename ""))
+  (define ext-pattern
+    (string-append "(?:" (regexp-quote source-extension)
+                   "|" (regexp-quote ".page.rkt")
+                   "|" (regexp-quote ".md.rkt")
+                   ")$"))
+  (regexp-replace (regexp ext-pattern) filename ""))
 
 ;; ---------------------------------------------------------------------------
 ;; Source Iteration
