@@ -103,8 +103,8 @@
   (define d (current-date))
   (format "~a-~a-~a"
           (date-year d)
-          (~a (date-month d) #:min-width 2 #:pad-string "0")
-          (~a (date-day d) #:min-width 2 #:pad-string "0")))
+          (~a (date-month d) #:min-width 2 #:pad-string "0" #:align 'right)
+          (~a (date-day d) #:min-width 2 #:pad-string "0" #:align 'right)))
 
 ;; Get a date N days ago in TOML format
 (define (days-ago-string n)
@@ -112,5 +112,5 @@
   (define d (seconds->date secs))
   (format "~a-~a-~a"
           (date-year d)
-          (~a (date-month d) #:min-width 2 #:pad-string "0")
-          (~a (date-day d) #:min-width 2 #:pad-string "0")))
+          (~a (date-month d) #:min-width 2 #:pad-string "0" #:align 'right)
+          (~a (date-day d) #:min-width 2 #:pad-string "0" #:align 'right)))
