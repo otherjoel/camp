@@ -14,6 +14,7 @@
          html-printer
          "structs.rkt"
          "collections.rkt"
+         "filter.rkt"
          "path-map.rkt"
          "log.rkt"
          "xref.rkt"
@@ -26,7 +27,7 @@
          copy-static-files
          sync-static-files
          build-context
-         output-path->url)  ; exported for testing and pagination
+         output-path->url)  ; re-exported from collections.rkt
 
 ;; ---------------------------------------------------------------------------
 ;; Collect Pass
@@ -80,8 +81,7 @@
                                     "no page found with slug: ~a" slug))))
   (define ctx (build-context pg
                              (page-collection-name pg)
-                             (site-info-taxonomy-index info)
-                             (site-info-page-links-by-collection info)))
+                             (site-info-taxonomy-index info)))
   (parameterize ([current-site-info info])
     (proc (page-doc pg) ctx)))
 
@@ -147,14 +147,6 @@
     (define metas (hash-set (document-metas doc) 'slug slug))
     (values normalized-slug (page-link url title metas))))
 
-(define (output-path->url output-path)
-  (define path-str (path->string output-path))
-  (define normalized (string-replace path-str "\\" "/"))
-  (define clean (regexp-replace #rx"index\\.html$" normalized ""))
-  (if (string-prefix? clean "/")
-      clean
-      (string-append "/" clean)))
-
 ;; ---------------------------------------------------------------------------
 ;; Term Index
 
@@ -217,23 +209,6 @@
     (for/fold ([idx index])
               ([term (in-list terms)])
       (hash-update idx term (λ (lst) (append lst (list pl))) '()))))
-
-(define (normalize-taxonomy-value val)
-  (cond
-    [(not val) '()]
-    [(string? val)
-     (map string-trim (string-split val ","))]
-    [(list? val)
-     (map (λ (v) (if (symbol? v) (symbol->string v) (~a v))) val)]
-    [else '()]))
-
-(define (page->page-link p)
-  (define doc (page-doc p))
-  (define slug (page-slug p))
-  (define title (or (meta-ref doc 'title) slug))
-  (define url (output-path->url (page-output-path p)))
-  (define metas (hash-set (document-metas doc) 'slug slug))
-  (page-link url title metas))
 
 ;; ---------------------------------------------------------------------------
 ;; Static File Copying
@@ -364,7 +339,7 @@
     (define contexts-by-slug
       (for/hash ([p (in-list pages)])
         (define coll-name (page-collection-name p))
-        (define ctx (build-context p coll-name taxonomy-index page-links-by-coll))
+        (define ctx (build-context p coll-name taxonomy-index))
         (values (page-slug p) ctx)))
 
     ;; Render pages using stored contexts
@@ -537,7 +512,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Context Building
 
-(define (build-context p coll-name taxonomy-index _page-links-by-coll)
+(define (build-context p coll-name taxonomy-index)
   (define slug (page-slug p))
   (define url (output-path->url (page-output-path p)))
   (define doc (page-doc p))

@@ -17,7 +17,9 @@
          in-sources
          path->slug
          parse-sort-value
-         sort-pages)
+         sort-pages
+         output-path->url
+         page->page-link)
 
 ;; ---------------------------------------------------------------------------
 ;; Source Pattern Handling
@@ -80,6 +82,25 @@
       (lambda (idx) (< idx (length paths)))
       #f
       #f))))
+
+;; ---------------------------------------------------------------------------
+;; Page URL and Link Construction
+
+(define (output-path->url output-path)
+  (define path-str (path->string output-path))
+  (define normalized (string-replace path-str "\\" "/"))
+  (define clean (regexp-replace #rx"index\\.html$" normalized ""))
+  (if (string-prefix? clean "/")
+      clean
+      (string-append "/" clean)))
+
+(define (page->page-link p)
+  (define doc (page-doc p))
+  (define slug (page-slug p))
+  (define title (or (meta-ref doc 'title) slug))
+  (define url (output-path->url (page-output-path p)))
+  (define metas (hash-set (document-metas doc) 'slug slug))
+  (page-link url title metas))
 
 ;; ---------------------------------------------------------------------------
 ;; Page Sorting

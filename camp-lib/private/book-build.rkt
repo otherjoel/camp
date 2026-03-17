@@ -10,6 +10,7 @@
          racket/list
          racket/path
          racket/port
+         racket/rerequire
          racket/system
          punct/doc
          punct/fetch
@@ -22,7 +23,20 @@
 
 (provide gather-book-parts
          copy-includes!
-         build-book!)
+         build-book!
+         load-book)
+
+;; ---------------------------------------------------------------------------
+;; Book Loading
+
+(define (load-book file-path)
+  (define abs-path
+    (simplify-path
+     (path->complete-path
+      (if (path? file-path) file-path (string->path file-path)))))
+  (dynamic-rerequire abs-path)
+  (define book-config (dynamic-require abs-path 'toml))
+  (hash-set book-config 'path abs-path))
 
 ;; ---------------------------------------------------------------------------
 ;; Chapter Construction

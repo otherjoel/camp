@@ -111,9 +111,8 @@
       (error 'call-with-built-context "page not found: ~a" target-slug))
     (define coll-name (page-collection-name pg))
     (define taxonomy-index (site-info-taxonomy-index info))
-    (define page-links-by-coll (site-info-page-links-by-collection info))
     (define ctx ((dynamic-require 'camp/private/build 'build-context)
-                 pg coll-name taxonomy-index page-links-by-coll))
+                 pg coll-name taxonomy-index))
     (thunk ctx)))
 
 (test-case "integration: prev returns previous page in collection"
