@@ -7,6 +7,7 @@
                "gregor-lib"
                "gui-easy-lib"
                "gui-lib"))
+(define implies '("camp-lib"))
 (define pkg-desc "GUI application for Camp static site generator")
 (define version "1.0")
 (define pkg-authors '("Joel Dueck"))
