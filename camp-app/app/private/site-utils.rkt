@@ -3,14 +3,17 @@
 ;; Pure utility functions for site operations
 
 (require camp
+         (only-in camp/private/build output-path->url)
          punct/doc
          punct/fetch
+         (only-in gregor iso8601->date date-provider?)
+         racket/exn
          racket/list
          racket/path
          racket/string
          racket/vector
          camp/app/private/gui
-         (only-in camp/private/collections is-source?))
+         (only-in camp/private/collections is-source? path->slug))
 
 (provide (all-from-out camp) ; includes resolve-site-spec
          source-pattern->directory
@@ -54,18 +57,32 @@
       (define source-dir
         (build-path root (source-pattern->directory (collection-source coll))))
       (if (equal? (simplify-path source-dir) (simplify-path folder))
-          (get-pages-for-directory folder source-ext)
+          (get-pages-for-directory folder source-ext coll)
           '())))
   (list->vector (flatten pages)))
 
-(define (get-pages-for-directory folder source-ext)
+(define (get-page-date-val doc)
+  (define raw (meta-ref doc 'date))
+  (cond
+    [(not raw) #f]
+    [(date-provider? raw) raw]
+    [(string? raw) (with-handlers ([exn:fail? (λ (_) #f)]) (iso8601->date raw))]
+    [else #f]))
+
+(define (get-pages-for-directory folder source-ext coll)
+  (define output-pattern (collection-output-paths coll))
   (for/list ([p (in-list (directory-list folder #:build? #t))]
              #:when (and (file-exists? p)
                          (is-source? p source-ext)))
     (define doc (get-doc/safe p))
+    (define slug (or (meta-ref doc 'slug) (path->slug p source-ext)))
+    (define date-val (get-page-date-val doc))
+    (define url
+      (with-handlers ([exn:fail? (λ (_) (path->string (file-name-from-path p)))])
+        (output-path->url (format-output-path output-pattern slug date-val))))
     (vector (or (meta-ref doc 'date) "")
             (or (meta-ref doc 'title) "Untitled")
-            (path->string (file-name-from-path p))
+            url
             p)))
 
 (define (get-doc/safe src-file)
