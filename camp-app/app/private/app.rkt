@@ -5,9 +5,11 @@
 (require camp
          camp/build
          camp/serve
-         (only-in camp/private/build sync-static-files)
+         (only-in camp/private/build sync-static-files output-path->url)
+         (only-in camp/private/xref normalize-slug)
          (only-in camp/private/watch start-watcher! get-watch-paths path-change-type)
          (only-in camp/private/output format-duration with-timing)
+         (only-in gregor iso8601->date)
          net/sendurl
          racket/exn
          racket/file
@@ -260,6 +262,9 @@
 (define (get-source idx)
   (vector-ref (vec-ref? (obs-peek @sources-in-folder) idx) fullpath))
 
+(define (get-source-url idx)
+  (vector-ref (vec-ref? (obs-peek @sources-in-folder) idx) file-col))
+
 (define (delete-source p)
   (define name (path->string (file-name-from-path p)))
   (define confirm
@@ -285,9 +290,14 @@
   (define idx (send list-box get-selection))
   (when idx
     (define p (get-source idx))
+    (define page-url (get-source-url idx))
     (define menu (new popup-menu%))
     (new menu-item% [parent menu] [label "Edit"]
          [callback (λ (_item _evt) (edit-source p))])
+    (new menu-item% [parent menu] [label "Preview"]
+         [callback (λ (_item _evt)
+                     (when (ensure-server-running!)
+                       (send-url (format "http://localhost:~a~a" localhost-port page-url))))])
     (new separator-menu-item% [parent menu])
     (new menu-item% [parent menu] [label "Delete"]
          [callback (λ (_item _evt) (delete-source p))])
@@ -314,7 +324,7 @@
           [else (super on-subwindow-event receiver event)])))))
 
 (define :source-docs-table
-  (table '("Date" "Title" "Filename") @sources-in-folder
+  (table '("Date" "Title" "URL") @sources-in-folder
          on-source-select
          #:entry->row source-entry->row
          #:mixin source-table-mixin
@@ -336,55 +346,61 @@
 (define (on-new-page-click)
   (render (?new-page)))
 
-(define (on-start-preview-click)
-  (match (obs-peek @stop-server-proc)
-    [#f
+(define (ensure-server-running!)
+  (cond
+    [(obs-peek @stop-server-proc) #t]
+    [else
      (define site (obs-peek @site))
      (define output (obs-peek @output-folder))
-     (when (and site output)
-       (define localhost:port (format "http://localhost:~a" localhost-port))
-       (log-msg "Starting preview server (port ~a)" localhost-port)
-       (define shutdown-server (start-server output #:port localhost-port #:watch? #t))
+     (cond
+       [(not (and site output)) #f]
+       [else
+        (log-msg "Starting preview server (port ~a)" localhost-port)
+        (define shutdown-server (start-server output #:port localhost-port #:watch? #t))
 
-       ;; File watching
-       (define site-config-path
-         (simplify-path (path->complete-path (resolve-site-spec (obs-peek @site-selection)))))
-       (define manifest-path (make-temporary-file "camp-static-~a"))
+        ;; File watching
+        (define site-config-path
+          (simplify-path (path->complete-path (resolve-site-spec (obs-peek @site-selection)))))
+        (define manifest-path (make-temporary-file "camp-static-~a"))
 
-       (define (handle-change changed-path)
-         (define rel (find-relative-path (site-root site) changed-path))
-         (define rel-str (if (equal? rel changed-path)
-                             (path->string (file-name-from-path changed-path))
-                             (path->string rel)))
-         (define change-type (path-change-type changed-path site site-config-path))
-         (log-msg "~a changed" rel-str)
-         (define-values (result rebuild-ms)
-           (with-timing
-             (case change-type
-               [(static)
-                (define static-dir (build-path (site-root site) (site-static-folder site)))
-                (with-handlers ([exn:fail? (λ (e) (log-msg "Static sync error:\n~a" (exn->string e)) #f)])
-                  (sync-static-files static-dir output manifest-path)
-                  #t)]
-               [(rkt)
-                (rerequire-render-modules! site)
-                (build-site!)
-                #t]
-               [else (build-site!) #t])))
-         (when result
-           (log-msg "Done (~a)" (format-duration rebuild-ms))))
+        (define (handle-change changed-path)
+          (define rel (find-relative-path (site-root site) changed-path))
+          (define rel-str (if (equal? rel changed-path)
+                              (path->string (file-name-from-path changed-path))
+                              (path->string rel)))
+          (define change-type (path-change-type changed-path site site-config-path))
+          (log-msg "~a changed" rel-str)
+          (define-values (result rebuild-ms)
+            (with-timing
+              (case change-type
+                [(static)
+                 (define static-dir (build-path (site-root site) (site-static-folder site)))
+                 (with-handlers ([exn:fail? (λ (e) (log-msg "Static sync error:\n~a" (exn->string e)) #f)])
+                   (sync-static-files static-dir output manifest-path)
+                   #t)]
+                [(rkt)
+                 (rerequire-render-modules! site)
+                 (build-site!)
+                 #t]
+                [else (build-site!) #t])))
+          (when result
+            (log-msg "Done (~a)" (format-duration rebuild-ms))))
 
-       (define watch-paths (get-watch-paths site site-config-path))
-       (define stop-watcher (start-watcher! watch-paths handle-change))
+        (define watch-paths (get-watch-paths site site-config-path))
+        (define stop-watcher (start-watcher! watch-paths handle-change))
 
-       (@stop-server-proc . := .
-        (λ ()
-          (stop-watcher)
-          (shutdown-server)
-          (when (file-exists? manifest-path)
-            (delete-file manifest-path))))
+        (@stop-server-proc . := .
+         (λ ()
+           (stop-watcher)
+           (shutdown-server)
+           (when (file-exists? manifest-path)
+             (delete-file manifest-path))))
+        #t])]))
 
-       (send-url localhost:port))]
+(define (on-start-preview-click)
+  (match (obs-peek @stop-server-proc)
+    [#f (when (ensure-server-running!)
+          (send-url (format "http://localhost:~a" localhost-port)))]
     [_ (mindful-demure-server-stop)]))
 
 (define (on-publish-click)
@@ -477,7 +493,7 @@
   (define/obs @date (date->string (current-date) "~Y-~m-~d"))
   (define/obs @slug "")
 
-  ;; Determine taxonomies for the current collection
+  ;; Determine taxonomies and output pattern for the current collection
   (define site (obs-peek @site))
   (define folder (obs-peek @folder-selection))
   (define coll (and site folder (folder->collection site folder)))
@@ -485,18 +501,27 @@
   (define taxonomy-obs
     (for/list ([name (in-list taxonomy-names)])
       (cons name (@ ""))))
+  (define output-pattern (and coll (collection-output-paths coll)))
+
+  (define @url-preview
+    (obs-combine
+     (λ (title date slug)
+       (define actual-slug (normalize-slug (if (non-empty-string? slug) slug title)))
+       (if (and output-pattern (non-empty-string? actual-slug))
+           (with-handlers ([exn:fail? (λ (_) "")])
+             (define date-val
+               (and (non-empty-string? date) (iso8601->date date)))
+             (output-path->url (format-output-path output-pattern actual-slug date-val)))
+           ""))
+     @title @date @slug))
 
   (define (create-page)
     (when (and site folder)
       (define title (obs-peek @title))
       (define date (obs-peek @date))
       (define slug (obs-peek @slug))
-      (define actual-slug
-        (if (string=? slug "")
-            (string-downcase (regexp-replace* #rx"[^a-zA-Z0-9]+" title "-"))
-            slug))
       (define source-ext (site-sources site))
-      (define filename (string-append actual-slug source-ext))
+      (define filename (string-append (normalize-slug title) source-ext))
       (define filepath (build-path folder filename))
 
       (define taxonomy-lines
@@ -510,6 +535,7 @@
          "---\n"
          (format "title: ~a\n" title)
          (format "date: ~a\n" date)
+         (if (non-empty-string? slug) (format "slug: ~a\n" slug) "")
          (apply string-append taxonomy-lines)
          "---\n\n"
          "Write your content here.\n"))
@@ -529,7 +555,8 @@
        (list
          (input @title (λ (_action s) (@title . := . s)) #:label "Title")
          (input @date (λ (_action s) (@date . := . s)) #:label "Date")
-         (input @slug (λ (_action s) (@slug . := . s)) #:label "Slug (optional)"))
+         (input @slug (λ (_action s) (@slug . := . s)) #:label "Slug (optional)")
+         (text @url-preview))
        (for/list ([pair (in-list taxonomy-obs)])
          (input (cdr pair)
                 (λ (_action s) ((cdr pair) . := . s))
