@@ -4,5 +4,7 @@
 
 (provide feed-content)
 
-(define (feed-content doc context)
+;; Returns an X-expression of the HTML content of the item as it appears
+;; in the RSS/Atom feed.
+(define (feed-content doc ctxt)
   `(article ,@"@"(document-body doc)))
