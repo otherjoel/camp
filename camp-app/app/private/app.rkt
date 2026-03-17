@@ -456,7 +456,11 @@
    (toolbar-button "New page" on-new-page-click #:icon bmp-new-page)
    (toolbar-button "Build site" on-build-click #:icon bmp-build)
    :startstop-button
-   (toolbar-button "Publish" on-publish-click #:icon bmp-publish)))
+   (button (if bmp-publish (list bmp-publish "Publish" 'top) "Publish")
+          on-publish-click
+          #:enabled? (obs-map @site (λ (s) (and s (site-deploy-script s) #t)))
+          #:min-size button-size
+          #:style '(multi-line))))
 
 ;; ============================================================================
 ;; Components: Menu
