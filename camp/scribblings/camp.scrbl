@@ -16,7 +16,7 @@
 
 Camp is a static site generator built on Racket. I made it for myself, but if you enjoy the craft
 and activity of web and print publishing, you might like it too. It gives you tools and techniques
-for building a site that is personal, programmable and permanent.
+for building a site or blog that is personal, programmable and permanent.
 
 Camp builds on @hyperlink["https://joeldueck.com/what-about/punct/"]{Punct}, a Racket DSL that lets
 you extend Markdown with Racket code, and output to HTML or Typst. 

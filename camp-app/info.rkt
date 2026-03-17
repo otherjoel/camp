@@ -4,6 +4,7 @@
                "punct-lib"
                "base"
                "camp-lib"
+               "gregor-lib"
                "gui-easy-lib"
                "gui-lib"))
 (define pkg-desc "GUI application for Camp static site generator")

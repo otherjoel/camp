@@ -58,12 +58,13 @@ phase and makes them available for navigation.
 
 To use taxonomies, declare them in your collection configuration:
 
-@verbatim|{
+@codeblock[#:keep-lang-line? #f]|{
+#lang toml/config
 [[collections]]
 name = "posts"
 source = "posts/*"
 output-paths = "posts/[yyyy]/[MM]/*/"
-render-with = 'myblog/render render-post
+render-with = '(myblog/render render-post)'
 order = "descending"
 sort-key = "date"
 taxonomies = ["tags", "series"]
@@ -193,24 +194,22 @@ common cases that would otherwise require tedious manual normalization.
 Sometimes you want to link to another page by its identity rather than by URL. The
 @racket[page-ref] function creates a link that Camp resolves during rendering:
 
-@verbatim|{
+@codeblock[#:keep-lang-line? #f]|{
+#lang punct
 For more details, see •page-ref{api-design}.
 }|
 
 The argument is the target page's slug, which defaults to the filename without extension. Spaces
-are normalized to hyphens, so @racket[page-ref]{api design} works too.
+are normalized to hyphens, so @code[#:lang "punct"]|{•page-ref{api design}}| works too.
 
 By default, the link text is the target page's title. To use custom text, provide it as content:
 
-@codeblock{
+@codeblock[#:keep-lang-line? #f]|{
+#lang punct
 See •page-ref["api-design"]{my earlier post about REST} for background.
-}
+}|
 
 The first argument (in square brackets) is the slug; the braces contain the link text.
-
-Page references have an advantage over hardcoded URLs: if you reorganize your site and a page's
-output path changes, the reference still works because it's based on the slug, not the URL. Camp
-resolves the current URL during each build.
 
 @section[#:tag "nav-custom"]{Custom Navigation}
 

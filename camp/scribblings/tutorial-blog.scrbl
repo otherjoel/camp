@@ -161,7 +161,8 @@ answer to the @racketmodfont{myblog/render} module path:
         (p "Powered by Camp")))))
 }}
 
-Your render function must take a Punct @racket[document] and a render @racket[context]
+Your render function must take a Punct @racket[document] and a render @racket[context], and return
+an x-expression representing the complete HTML page.
 
 @section[#:tag "blog-static-assets"]{Adding Static Assets}
 

@@ -94,16 +94,27 @@ links back to the original page on your site.
 
 @declare-exporting[camp/main]
 
-Camp uses path patterns to map source files to output locations. A @deftech{source path pattern}
-specifies where to find source documents within a collection (e.g., @racket["blog/*"]). An
-@deftech{output path pattern} specifies the URL structure for rendered pages, with support for
-slug substitution and date-based paths (e.g., @racket["blog/[yyyy]/[MM]/*/"]).
+Camp uses path patterns to map source files to output locations. 
 
-In output patterns, @tt{*} is replaced by the page's slug, and bracketed codes like @tt{[yyyy]} or
-@tt{[MM]} are replaced with values from the page's @tt{date} metadata using
-@hyperlink["http://unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table"]{CLDR format patterns}.
-A trailing @tt{/} produces @filepath{index.html} (e.g., @racket["posts/*/"] becomes
-@filepath{posts/my-slug/index.html}).
+A @deftech{source path pattern} specifies where to find source documents within a collection (e.g.,
+@racket["blog/*"]). An @deftech{output path pattern} specifies the URL structure for rendered pages,
+with support for slug substitution and date-based paths (e.g., @racket["blog/[yyyy]/[MM]/*/"]).
+
+An @tech{output path pattern} specifies the folder/file structure (and thus the URL) for rendered
+pages, with support for slug substitution and date-based paths. In output path patterns:
+
+@itemlist[#:style 'compact
+
+@item{Any folder name consisting only of @litchar{*} will be replaced by the source’s @tech{slug}.}
+
+@item{Any folder name consisting of valid CIDR syntax inside a pair of brackets @litchar{[]} will be
+replaced by a string of the corresponding info from the source’s @tt{date} meta.}
+
+@item{If the pattern ends in a trailing slash @litchar{/}, the output file will be named
+@filepath{index.html}. Otherwise the output is the name of the pattern’s final element with an
+added @filepath{.html} extension.}
+
+]
 
 @defproc[(source-path-pattern? [v any/c]) boolean?]{
 Returns @racket[#t] if @racket[_v] is a valid @tech{source path pattern}: a relative path string
