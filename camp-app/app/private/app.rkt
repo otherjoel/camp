@@ -471,17 +471,23 @@
 (define (on-remove-site)
   (define current (obs-peek @site-selection))
   (when current
-    (remove-from-pref! @sites current)
-    (@site-selection . := . (match (obs-peek @sites)
-                              ['() #f]
-                              [(list* first _) first]))))
+    (define name (site-spec->display-name current))
+    (define confirm
+      (message-box "Remove site"
+                   (format "Remove ~a from the site list?" name)
+                   (get-main-frame) '(yes-no caution)))
+    (when (eq? confirm 'yes)
+      (remove-from-pref! @sites current)
+      (@site-selection . := . (match (obs-peek @sites)
+                                ['() #f]
+                                [(list* first _) first])))))
 
 (define :main-menu
   (menu-bar
    (menu
     "File"
     (menu-item "Add site…" on-add-site)
-    (menu-item "Remove this site" on-remove-site)
+    (menu-item "Remove this site…" on-remove-site)
     (menu-item-separator)
     (menu-item "Preferences…" (λ () (render (?prefs)))))
    (menu
