@@ -17,6 +17,8 @@
 (provide dragdrop-mix
          make-mix-close
          ?dialog
+         set-main-frame!
+         get-main-frame
          mono-font
          log-msg
          log-output-textbox
@@ -172,16 +174,31 @@
   (new log-output-textbox% [@buffer @log-buffer]))
 
 ;; ============================================================================
+;; Main frame reference (for centering dialogs)
+
+(define main-frame #f)
+(define (set-main-frame! f) (set! main-frame f))
+(define (get-main-frame) main-frame)
+
+;; Mixin: reparent dialogs to the main frame so built-in `center` handles
+;; multi-monitor positioning correctly.
+(define (reparent-to-main-mix %)
+  (class %
+    (init [parent #f])
+    (super-new [parent (or main-frame parent)])))
+
+;; ============================================================================
 ;; Closable dialogs
 
 (define (make-mix-close)
   (define close-proc! void)
   (define (mix %)
-    (class %
-      (super-new)
-      (set! close-proc!
-            (lambda ()
-              (send this show #f)))))
+    (reparent-to-main-mix
+     (class %
+       (super-new)
+       (set! close-proc!
+             (lambda ()
+               (send this show #f))))))
   (values (λ () (close-proc!)) mix))
 
 (define (?dialog msg)

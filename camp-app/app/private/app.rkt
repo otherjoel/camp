@@ -270,7 +270,7 @@
   (define confirm
     (message-box "Delete page"
                  (format "Delete ~a?" name)
-                 #f '(yes-no caution)))
+                 (get-main-frame) '(yes-no caution)))
   (when (eq? confirm 'yes)
     (delete-file p)
     (log-msg "Deleted: ~a" name)
@@ -598,7 +598,7 @@
              (render (?dialog (format "Cannot find: ~a" p))))])))
 
   (define (browse-folder)
-    (define path (get-directory "Select site folder"))
+    (define path (get-directory "Select site folder" (get-main-frame)))
     (when path
       (@path . := . (path->string path))))
 
@@ -626,7 +626,7 @@
   (define default-dir
     (and (eq? (system-type 'os) 'macosx)
          (string->path "/Applications/")))
-  (define path (get-file "Choose editor" #f default-dir))
+  (define path (get-file "Choose editor" (get-main-frame) default-dir))
   (when path
     (@editor . := . (path->string path))))
 
@@ -663,7 +663,7 @@
    #:size '(900 700)
    #:stretch '(#t #t)
    #:title "Camp"
-   #:mixin dragdrop-mix
+   #:mixin (λ (%) (dragdrop-mix (class % (super-new) (set-main-frame! this))))
    :main-menu
    (vpanel
     (hpanel
