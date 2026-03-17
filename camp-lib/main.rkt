@@ -6,7 +6,6 @@
          punct/doc
          "private/structs.rkt"
          "private/main.rkt"
-         "private/book.rkt"
          "private/path-map.rkt"
          "private/typst-render.rkt"
          "private/html-render.rkt"

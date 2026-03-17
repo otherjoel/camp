@@ -8,7 +8,9 @@
 (define version "1.0")
 (define pkg-authors '("Joel Dueck"))
 (define license 'LicenseRef-CreatorCxn-1.0)
-(define build-deps '("debug"
+(define build-deps '("hash-view-scribble"
+                     "scribble-doc"
+                     "debug"
                      "gregor-doc"
                      "gregor-lib"
                      "hash-view"

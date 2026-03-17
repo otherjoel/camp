@@ -10,9 +10,9 @@
                "toml-config-lib"
                "web-server-lib"))
 (define pkg-desc "Implementation part of Camp")
-(define version "0.0")
+(define version "1.0")
 (define pkg-authors '("Joel Dueck"))
-(define license '(Apache-2.0 OR MIT))
+(define license 'LicenseRef-CreatorCxn-1.0)
 (define build-deps '())
 
 ;; Register raco camp command
