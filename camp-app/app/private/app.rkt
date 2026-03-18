@@ -210,7 +210,8 @@
   (choice @sites on-site-select
           #:selection @site-selection
           #:choice->label site-spec->display-name
-          #:label "Sites"))
+          #:label "Sites"
+          #:stretch '(#t #f)))
 
 ;; ============================================================================
 ;; Components: Folder table
@@ -337,9 +338,10 @@
 
 (define button-size '(120 50))
 
-(define (toolbar-button label action #:icon [icon #f])
+(define (toolbar-button label action #:icon [icon #f] #:enabled? [@enabled? #t])
   (button (if icon (list icon label 'top) label)
           action
+          #:enabled? @enabled?
           #:min-size button-size
           #:style '(multi-line)))
 
@@ -436,6 +438,7 @@
 (define :startstop-button
   (button (if bmp-start (list bmp-start "Start preview" 'top) "Start preview")
           on-start-preview-click
+          #:enabled? @site
           #:min-size button-size
           #:style '(multi-line)
           #:mixin (λ (%)
@@ -453,8 +456,8 @@
 (define :toolbar
   (hpanel
    #:stretch '(#t #f)
-   (toolbar-button "New page" on-new-page-click #:icon bmp-new-page)
-   (toolbar-button "Build site" on-build-click #:icon bmp-build)
+   (toolbar-button "New page" on-new-page-click #:icon bmp-new-page #:enabled? @site)
+   (toolbar-button "Build site" on-build-click #:icon bmp-build #:enabled? @site)
    :startstop-button
    (button (if bmp-publish (list bmp-publish "Publish" 'top) "Publish")
           on-publish-click
