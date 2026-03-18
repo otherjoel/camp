@@ -1,0 +1,155 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: ui-rounded, 'Hiragino Maru Gothic ProN', Quicksand, Comfortaa,
+    Manjari, 'Arial Rounded MT', 'Arial Rounded MT Bold', Calibri,
+    source-sans-pro, sans-serif;
+  line-height: 1.6;
+  margin: 0;
+  padding: 32px 24px;
+  background: linear-gradient(135deg, #f8f6f3 0%, #f0ede8 100%);
+  min-height: 100vh;
+  color: #3d3832;
+}
+
+.paper {
+  max-width: 42rem;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow:
+    0 1px 3px rgba(45, 50, 55, 0.08),
+    0 4px 12px rgba(45, 50, 55, 0.06);
+  padding: 2.5rem 3rem;
+}
+
+header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #edeae5;
+}
+
+header nav {
+  font-size: 0.95rem;
+}
+
+header nav a {
+  color: #5a8f6e;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+header nav a:hover {
+  color: #2d5a45;
+  text-decoration: underline;
+}
+
+main {
+  min-height: 40vh;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2d5a45;
+  margin: 0 0 1rem 0;
+}
+
+h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2d5a45;
+  margin: 1.5rem 0 0.75rem 0;
+}
+
+p {
+  margin: 0 0 1rem 0;
+}
+
+a {
+  color: #5a8f6e;
+}
+
+a:hover {
+  color: #2d5a45;
+}
+
+article.post time {
+  display: block;
+  font-size: 0.9rem;
+  color: #8a837a;
+  margin-bottom: 1.5rem;
+}
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #edeae5;
+  font-size: 0.9rem;
+}
+
+.pagination a {
+  color: #6b635a;
+  text-decoration: none;
+}
+
+.pagination a:hover {
+  color: #2d5a45;
+}
+
+footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #edeae5;
+  font-size: 0.85rem;
+  color: #8a837a;
+}
+
+.posts {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #edeae5;
+}
+
+.posts ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.posts li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0ede8;
+}
+
+.posts li:last-child {
+  border-bottom: none;
+}
+
+.posts .date {
+  color: #8a837a;
+  font-size: 0.9rem;
+}
+
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  background: #f0ede8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+@media (max-width: 600px) {
+  body {
+    padding: 16px 12px;
+  }
+  .paper {
+    padding: 1.5rem 1.25rem;
+    border-radius: 6px;
+  }
+}
