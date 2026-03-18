@@ -653,7 +653,8 @@
     (text "Enter a path to site.rkt, a folder containing site.rkt,")
     (text "or a package name:")
     (hpanel
-     (input @path (λ (_action s) (@path . := . s)) #:min-size '(350 #f))
+     (input @path (λ (action s) (@path . := . s) (when (eq? action 'return) (add-by-path)))
+            #:min-size '(350 #f))
      (button "Browse…" browse-folder))
     (hpanel
      (button "Add" add-by-path)
