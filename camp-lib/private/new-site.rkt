@@ -6,8 +6,11 @@
          racket/format
          racket/path
          racket/file
+         racket/runtime-path
          racket/string
          web-server/templates)
+
+(define-runtime-path template-static-dir "template/static")
 
 (provide create-new-site)
 
@@ -85,7 +88,7 @@
     #:exists 'error)
 
   ;; Copy static files (no templating needed)
-  (copy-file (collection-file-path "private/template/static/style.css" "camp")
+  (copy-file (build-path template-static-dir "style.css")
              (build-path target-dir "static" "style.css")))
 
 ;; Convert kebab-case name to title case
