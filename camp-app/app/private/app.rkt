@@ -2,8 +2,7 @@
 
 ;; Camp App - Main application window and logic
 
-(require camp
-         camp/build
+(require camp/build
          camp/serve
          (only-in camp/private/build sync-static-files output-path->url)
          (only-in camp/private/xref normalize-slug)
@@ -12,18 +11,17 @@
          (only-in gregor iso8601->date)
          net/sendurl
          racket/exn
-         racket/file
          racket/gui
          racket/gui/easy
          racket/gui/easy/operator
          racket/list
          racket/match
          racket/path
-         racket/port
          racket/rerequire
          racket/runtime-path
          racket/string
          racket/vector
+         setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
          camp/app/private/site-utils)
@@ -47,26 +45,34 @@
 (define-runtime-path icon-start    "icons/start.png")
 (define-runtime-path icon-stop     "icons/stop.png")
 (define-runtime-path icon-publish  "icons/publish.png")
+(define-runtime-path icon-app      "icons/app.png")
+(define-runtime-path pkg-dir      "../..")
 
 (define icon-size 32)
+(define about-icon-size 128)
 
-(define (try-read-bitmap path)
+(define (scale-bitmap path size)
   (and (file-exists? path)
        (let* ([src (read-bitmap path)]
               [w (send src get-width)]
               [h (send src get-height)]
               [bs (get-display-backing-scale)]
-              [dest (make-bitmap icon-size icon-size #:backing-scale bs)]
+              [dest (make-bitmap size size #:backing-scale bs)]
               [dc (send dest make-dc)])
          (send dc set-smoothing 'smoothed)
-         (send dc draw-bitmap-section-smooth src 0 0 icon-size icon-size 0 0 w h)
+         (send dc draw-bitmap-section-smooth src 0 0 size size 0 0 w h)
          dest)))
 
-(define bmp-new-page (try-read-bitmap icon-new-page))
-(define bmp-build    (try-read-bitmap icon-build))
-(define bmp-start    (try-read-bitmap icon-start))
-(define bmp-stop     (try-read-bitmap icon-stop))
-(define bmp-publish  (try-read-bitmap icon-publish))
+(define bmp-new-page (scale-bitmap icon-new-page icon-size))
+(define bmp-build    (scale-bitmap icon-build icon-size))
+(define bmp-start    (scale-bitmap icon-start icon-size))
+(define bmp-stop     (scale-bitmap icon-stop icon-size))
+(define bmp-publish  (scale-bitmap icon-publish icon-size))
+(define bmp-app      (scale-bitmap icon-app about-icon-size))
+
+(define app-version
+  (let ([info (get-info/full pkg-dir)])
+    (if info (info 'version (λ () "??")) "??")))
 
 ;; ============================================================================
 ;; Core observables
@@ -95,6 +101,8 @@
 (define @output-folder
   (obs-map @site
            (λ (s) (and s (build-path (site-root s) (site-output-folder s))))))
+
+(define @has-site? (obs-map @site (λ (s) (and s #t))))
 
 ;; ============================================================================
 ;; Build
@@ -438,7 +446,7 @@
 (define :startstop-button
   (button (if bmp-start (list bmp-start "Start preview" 'top) "Start preview")
           on-start-preview-click
-          #:enabled? @site
+          #:enabled? @has-site?
           #:min-size button-size
           #:style '(multi-line)
           #:mixin (λ (%)
@@ -456,8 +464,8 @@
 (define :toolbar
   (hpanel
    #:stretch '(#t #f)
-   (toolbar-button "New page" on-new-page-click #:icon bmp-new-page #:enabled? @site)
-   (toolbar-button "Build site" on-build-click #:icon bmp-build #:enabled? @site)
+   (toolbar-button "New page" on-new-page-click #:icon bmp-new-page #:enabled? @has-site?)
+   (toolbar-button "Build site" on-build-click #:icon bmp-build #:enabled? @has-site?)
    :startstop-button
    (button (if bmp-publish (list bmp-publish "Publish" 'top) "Publish")
           on-publish-click
@@ -489,16 +497,38 @@
   (menu-bar
    (menu
     "File"
+    (menu-item "New page" on-new-page-click #:shortcut '(cmd #\N) #:enabled? @has-site?)
+    (menu-item-separator)
     (menu-item "Add site…" on-add-site)
     (menu-item "Remove this site…" on-remove-site)
     (menu-item-separator)
-    (menu-item "Preferences…" (λ () (render (?prefs)))))
-   (menu
-    "Help"
-    (menu-item "About" (λ () (render (?dialog "Camp App v0.1")))))))
+    (menu-item "Preferences…" (λ () (render (?prefs)))))))
 
 ;; ============================================================================
 ;; Dialogs
+
+(define about-url "https://joeldueck.com/what-about/camp")
+
+(define link-font (make-object font% 13 'default 'normal 'normal #t))
+
+(define (?about)
+  (define-values (close! closing-mixin) (make-mix-close))
+  (dialog
+   #:title "About Camp Computer"
+   #:mixin closing-mixin
+   #:size '(300 #f)
+   #:alignment '(center center)
+   (vpanel
+    #:alignment '(center center)
+    (image bmp-app)
+    (text "Camp Computer")
+    (text (format "Version ~a" app-version))
+    (spacer)
+    (button about-url (λ () (send-url about-url))
+            #:font link-font
+            #:stretch '(#f #f))
+    (spacer)
+    (button "Close" close!))))
 
 (define (?new-page)
   (define-values (close! closing-mixin) (make-mix-close))
@@ -697,4 +727,5 @@
 ;; Entry point
 
 (define (run-app)
+  (application-about-handler (λ () (render (?about))))
   (render §app))
