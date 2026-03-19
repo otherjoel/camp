@@ -17,6 +17,7 @@
          racket/vector
          "main.rkt"
          "build.rkt"
+         "book-build.rkt"
          "serve.rkt"
          "watch.rkt"
          "structs.rkt"
@@ -45,6 +46,7 @@
          ["build" (with-logging-to-stderr run-build)]
          ["serve" (with-logging-to-stderr run-serve)]
          ["deploy" (with-logging-to-stderr run-deploy)]
+         ["print" (with-logging-to-stderr run-print)]
          ["new" (with-logging-to-stderr run-new)]
          ["draft" (with-logging-to-stderr run-draft)]
          ["help" (show-usage)]
@@ -65,6 +67,8 @@
   (displayln "    --no-watch                  Disable file watching")
   (displayln "    --apache-log                Use Apache combined log format")
   (displayln "  deploy [site]                 Run deploy script")
+  (displayln "  print [options] [book.rkt]    Build book PDF")
+  (displayln "    --open                      Open PDF after building")
   (displayln "  draft [collection] [site]     Create new draft post")
   (displayln "  new <name>                    Create new site from template")
   (displayln "  help                          Show this help")
@@ -419,6 +423,69 @@
       (log-camp-info (~a "  " (red "✗") " " (bold "Deploy failed") " (exit code " exit-code ")")))
 
   (exit exit-code))
+
+;; ---------------------------------------------------------------------------
+;; Print command
+
+(define (run-print)
+  (define open? #f)
+
+  (define remaining
+    (command-line
+     #:program "raco camp print"
+     #:argv (current-command-line-arguments)
+     #:once-each
+     [("--open") "Open PDF after building"
+                 (set! open? #t)]
+     #:args book-paths
+     book-paths))
+
+  (define books-to-build
+    (if (null? remaining)
+        (discover-books)
+        (map (λ (p) (simplify-path (path->complete-path p))) remaining)))
+
+  (when (null? books-to-build)
+    (log-camp-error "No .book.rkt files found.")
+    (exit 1))
+
+  (for ([book-path (in-list books-to-build)])
+    (unless (file-exists? book-path)
+      (log-camp-error (~a "Book file not found: " book-path))
+      (exit 1))
+
+    (log-camp-info (~a (bold "camp print") " " (dim (path->string (file-name-from-path book-path)))))
+
+    (define total-start (current-inexact-monotonic-milliseconds))
+    (define pdf-path
+      (with-handlers ([exn:fail?
+                       (λ (e)
+                         (log-error "building book" e)
+                         (exit 1))])
+        (build-book! (load-book book-path))))
+
+    (define total-ms (- (current-inexact-monotonic-milliseconds) total-start))
+    (cond
+      [pdf-path
+       (log-camp-info (~a "  " (green "✓") " " (bold (~a "Done in " (format-duration total-ms)))))
+       (when open?
+         (system* (find-executable-path "open") (path->string pdf-path)))]
+      [else
+       (log-camp-info (~a "  " (red "✗") " " (bold "Build failed")))
+       (exit 1)])))
+
+(define (discover-books)
+  (define site-path (resolve-site-spec/cli #f))
+  (define site
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (log-camp-error (~a "Error loading site: " (exn-message e)))
+                       (exit 1))])
+      (load-site site-path)))
+  (define root (site-root site))
+  (for/list ([p (in-list (directory-list root #:build? #t))]
+             #:when (regexp-match? #px"\\.book\\.rkt$" (path->string p)))
+    p))
 
 ;; ---------------------------------------------------------------------------
 ;; New command
