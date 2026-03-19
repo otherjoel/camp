@@ -12,6 +12,7 @@ publish/
 mysite/
 *.md
 !README.md
+!CODE_OF_CONDUCT.md
 *.html
 *.js
 *.css
