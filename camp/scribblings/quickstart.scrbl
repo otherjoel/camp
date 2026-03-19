@@ -88,3 +88,5 @@ To understand how the pieces fit together and customize your site, continue to
 @secref["tutorial-blog"], which walks through building a blog from scratch. You'll learn how to
 configure collections, write render functions, and generate feeds. The @secref["reference"] section
 provides complete documentation of Camp's modules and functions when you need to look something up.
+
+@ensure-sandbox-state['gone]
