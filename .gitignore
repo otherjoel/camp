@@ -17,3 +17,4 @@ mysite/
 *.css
 !camp-demo/static/*.css
 !camp-lib/private/template/static/*.css
+!camp/scribblings/scrbl-aux.css
