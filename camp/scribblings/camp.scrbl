@@ -29,7 +29,8 @@ tags or series).}
 
 @item{You can use Camp via the CLI, or via @secref["gui-app"].}
 
-@item{Camp helps you convert collections of posts into print-ready book PDFs via Typst.}
+@item{Camp helps you convert collections of posts into print-ready book PDFs via 
+  @hyperlink["https://typst.app"]{Typst}.}
 
 @item{Camp produces spec-compliant RSS/Atom feeds. And though many may not notice, it also produces
 HTML that is line-wrapped and indented for high readability.}
