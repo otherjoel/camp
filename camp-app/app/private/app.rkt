@@ -572,9 +572,10 @@
                    #:unless (string=? (obs-peek (cdr pair)) ""))
           (format "~a: ~a\n" (car pair) (obs-peek (cdr pair)))))
 
+      (define pkg (site-racket-collection site))
       (define content
         (string-append
-         "#lang punct\n"
+         (if pkg (string-append "#lang punct " pkg "\n") "#lang punct\n")
          "---\n"
          (format "title: ~a\n" title)
          (format "date: ~a\n" date)
