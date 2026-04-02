@@ -6,6 +6,7 @@
          racket/file
          racket/match
          racket/path
+         racket/rerequire
          racket/set
          racket/string
          punct/doc
@@ -522,6 +523,7 @@
   (unless render-spec
     (error 'build! "no render function for collection ~a and no site default"
            (collection-name coll)))
+  (dynamic-rerequire (car render-spec))
   (apply dynamic-require render-spec))
 
 ;; ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@
 (require racket/list
          racket/match
          racket/path
+         racket/rerequire
          racket/string
          racket/file
          gregor
@@ -107,6 +108,7 @@
   (define filename (feed-config-filename feed-cfg))
   (define coll-names (feed-config-collections feed-cfg))
   (define render-spec (feed-config-render-with feed-cfg))
+  (dynamic-rerequire (car render-spec))
   (define render-fn (apply dynamic-require render-spec))
 
   (define feed-format
