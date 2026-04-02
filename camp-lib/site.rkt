@@ -3,41 +3,59 @@
 (module reader toml/config/custom
   (require splitflap/constructs
            gregor
+           racket/match
            (only-in camp/private/path-map
                     source-path-pattern?
                     output-path-pattern?
                     non-rkt-file-extension?))
+  (provide author-string? feed-filename? render-spec?)
 
   (define (author-string? s) ; "Name (email)" format
-    (and (string? s)
-         (regexp-match? #px".+\\s+\\(.+\\)" s)))
+    (match s
+      [(regexp #px".+\\s+\\((.+)\\)\\s*$" (list _ email))
+       (email-address? email)]
+      [_ #f]))
 
-  (define (list-of-authors? v)
-    (and (list? v) (andmap author-string? v)))
+  (define (feed-filename? v)
+    (and (string? v) (regexp-match? #px"\\.(?:atom|rss)$" v)))
+
+  ; This validator does it all in one shot rather than daisy-chaining with
+  ; readable-datum? in the schema, so we can document it more easily
+  (define (render-spec? v__)
+    (let* ([v_ (readable-datum? v__)]
+           [v (and (box? v_) (unbox v_))])
+      (and (list? v)
+           (= 2 (length v))
+           (module-path? (car v))
+           (symbol? (cadr v))
+           v)))
 
   #:schema
   ([title non-empty-string? required]
    [url valid-url-string? required]
    [founded date-provider? required]
-   [authors list-of-authors? required]
+   [authors (listof author-string?) required]
    [sources non-rkt-file-extension? (optional ".md.rkt")]
    [static-folder path-string? (optional "static")]
    [output-folder path-string? (optional "publish")]
    [deploy-script path-string? (optional #f)]
-   [default-render readable-datum? (optional #f)]
+   [default-render render-spec? (optional #f)]
    [collections
     (array-of table
               [name non-empty-string? required]
               [source source-path-pattern? required]
               [output-paths output-path-pattern? required]
-              [render-with readable-datum? (optional #f)]
+              [render-with render-spec? (optional #f)]
               [order (or/c "ascending" "descending") (optional "descending")]
               [sort-key non-empty-string? (optional "date")]
               [taxonomies (listof non-empty-string?) (optional '())])
     required]
    [feeds
     (array-of table
-              [filename path-string? required]
+              [filename feed-filename? required]
               [collections (listof non-empty-string?) required]
-              [render-with readable-datum? required])
+              [render-with render-spec? required])
     optional]))
+
+(require 'reader)
+(provide author-string? feed-filename? render-spec?)

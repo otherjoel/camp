@@ -5,12 +5,19 @@
           hash-view/scribble
           (for-label (except-in racket/base date date?)
                      camp
-                     gregor))
+                     camp/site
+                     gregor
+                     racket/contract
+                     splitflap/constructs
+                     toml/config/schema
+                     (only-in xml xexpr?)))
 
 @(define e (make-base-eval))
-@(e '(require camp gregor))
+@(e '(require camp gregor camp/site))
 
 @title[#:style 'quiet #:tag "mod-site"]{Site Configuration Language}
+
+@defmodulelang[camp/site]
 
 A Camp @deftech{site} is a single website, organized as a Racket package.
 
@@ -18,64 +25,146 @@ A site has one or more @deftech{collections}, which are named groups of pages wi
 mapping between source and output paths, and optional taxonomies for further organization.
 
 @inline-note[#:type 'warning]{Note that the term @tech{collections} in Camp is different than
-Racket's own concept of @secref["Library_Collections"
-#:doc '(lib "scribblings/guide/guide.scrbl")].}
+ Racket's own concept of @secref["Library_Collections" #:doc '(lib "scribblings/guide/guide.scrbl")].}
 
 A @deftech{page} is a single source document.
 
 A @deftech{feed} is an RSS or Atom feed which includes all @tech{pages} from a set of one or more
 @tech{collections}. A @tech{site} may specify zero feeds, one feed, or multiple feeds.
 
-@defmodulelang[camp/site]
-
 The @hash-lang[] @racketmodname[camp/site] language provides a TOML-based configuration format for
 defining Camp sites. Files written in this language are parsed and validated against the site
 schema.
 
+@codeblock|{
+#lang camp/site
+
+# Required values ------
+title = "Site Title"
+url = "https://example.com"
+founded = 1912-07-04              # Note no quotes
+authors = ["Me (me@example.com)"] # List of strings, must be in this format
+
+# Optional values ------
+sources = ".mypage"         # .md.rkt and .page.rkt are always recognized
+static-folder = "res"       # default is "static"
+output-folder = "public"    # default is "publish"
+deploy-script = "deploy.sh"
+default-render = "(camp-demo/render render-page)"
+# → string datum: list of module and a function identifier
+# function signature: Document, Context -> Xexpr
+
+# Collections ----------
+
+[[collections]]
+name = "blog"
+source = "blog/*"
+output-paths = "blog/[yyyy]/[MM]/*/"
+render-with = "(camp-demo/render render-post)" # same as default-render
+order = "descending"
+sort-key = "date"
+taxonomies = ["tags", "series"]
+
+[[collections]]
+name = "pages"
+source = "pages/*"
+output-paths = "*/"
+render-with = "(camp-demo/render render-page)"
+sort-key = "title"
+order = "ascending"
+
+[[feeds]]
+filename = "feed.atom" # Extension .atom or .rss sets format
+collections = ["blog"] # List of collection names
+render-with = "(camp-demo/feeds feed-content)" # same as default-render
+}|
+
 @section[#:tag "ref-site-required"]{Required Fields}
 
-@tabular[#:sep @hspace[2]
+@tabular[#:style 'boxed
+         #:pad '(1 0)
+         #:row-properties '(bottom-border ())
          (list (list @bold{Field} @bold{Type} @bold{Description})
-               (list @racket[title] "string" "Site title")
-               (list @racket[url] "string" "Base URL (must be valid)")
-               (list @racket[founded] "date" "Founding date for tag URI generation")
-               (list @racket[authors] "array" "Authors in \"Name (email)\" format"))]
+               (list @racket[title] @racket[string?] "Site title")
+               (list @racket[url] @racket[valid-url-string?] "Base URL (must be valid)")
+               (list @racket[founded] @racket[date?] "Founding date for tag URI generation")
+               (list @racket[authors] @racket[(listof author-string?)] "Authors in \"Name (email)\" format"))]
+
+@defproc[(author-string? [v any/c]) boolean?]{
+
+ Returns @racket[#t] if @racket[_v] is a string in @racket["Name (email@example.com)"] format, where @tt{email}
+ is a valid email address per @racket[email-address?] from @racketmodname[splitflap].
+
+ @examples[
+ #:eval e
+ (author-string? "Me (me@example.com)")
+ (author-string? "Me (me@1.com)")
+ (author-string? " (me@example.com)")]
+
+}
 
 @section[#:tag "ref-site-optional"]{Optional Fields}
 
-@tabular[#:sep @hspace[2]
+@tabular[#:style 'boxed
+         #:pad '(1 0)
+         #:row-properties '(bottom-border ())
          (list (list @bold{Field} @bold{Type} @bold{Default} @bold{Description})
-               (list @racket[sources] "string" @racket[".md.rkt"] "Source file extension")
-               (list @racket[static-folder] "string" @racket["static"] "Static assets directory")
-               (list @racket[output-folder] "string" @racket["publish"] "Build output directory")
-               (list @racket[deploy-script] "string" @racket[#f] "Deployment script path")
-               (list @racket[default-render] "datum" @racket[#f] "Default render function"))]
+               (list @racket[sources] @racket[non-rkt-file-extension?] @racket[".md.rkt"] "Source file extension")
+               (list @racket[static-folder] @racket[path-string?] @racket["static"] "Static assets directory")
+               (list @racket[output-folder] @racket[path-string?] @racket["publish"] @nonbreaking{Build output directory})
+               (list @racket[deploy-script] @racket[path-string?] @racket[#f] @nonbreaking{Deployment script path})
+               (list @nonbreaking[@racket[default-render]] @racket[render-spec?] @racket[#f] @nonbreaking{Default render function}))]
 
 @section[#:tag "ref-site-collections"]{Collections}
 
 Each @tt{[[collections]]} entry defines a group of source documents:
 
-@tabular[#:sep @hspace[2]
-         (list (list @bold{Field} @bold{Type} @bold{Required} @bold{Description})
-               (list @racket[name] "string" "yes" "Collection identifier")
-               (list @racket[source] "string" "yes" "Glob pattern (must end with *)")
-               (list @racket[output-paths] "string" "yes" "Output pattern with * and date codes")
-               (list @racket[render-with] "datum" "no" "Render function specification")
-               (list @racket[order] "string" "no" "\"ascending\" or \"descending\" (default)")
-               (list @racket[sort-key] "string" "no" "Metadata key for sorting (default: \"date\")")
-               (list @racket[taxonomies] "array" "no" "Taxonomy metadata keys"))]
+@tabular[#:style 'boxed
+         #:pad '(1 0)
+         #:row-properties '(bottom-border ())
+         (list (list @bold{Field} @bold{Type} @bold{Default} @bold{Description})
+               (list @racket[name] @racket[string?] "" "Collection identifier")
+               (list @racket[source] @nonbreaking[@racket[source-path-pattern?]] "" @nonbreaking{Location of sources})
+               (list @nonbreaking[@racket[output-paths]] @racket[output-path-pattern?] "" "Defines output paths/URLs")
+               (list @racket[render-with] @racket[render-spec?] "" @nonbreaking{Render function specification})
+               (list @racket[taxonomies] @racket[(listof string?)] "" "(Optional) metadata keys")
+               (list @racket[sort-key] @racket[string?] @racket{date} "Metadata sort key")
+               (list @racket[order] @racket[(or/c "ascending" "descending")] @racket{descending} @nonbreaking{Sort order})
+               )]
+
+@defproc[(render-spec? [v any/c]) (or/c #f (listof module-path? symbol?))]{
+                                                                           
+ Validates that @racket[_v] is a string containing a two-element list, with the first element being a
+ @racket[module-path?] and the second being an identifier. Returns the two-element list if validation
+ succeeds, or @racket[#f] otherwise.
+ 
+ In order to be valid, at site build time the identifier must be that of a function
+ @racket[provide]d by the module, and the function must have the signature
+ @racket[(-> document? context? xexpr?)]. This information is not checked by @racket[render-spec?],
+ however.
+ 
+ @examples[#:eval e
+           (render-spec? "(my-module render-func)")
+           (render-spec? "(\"mod.rkt\" func)")
+           (render-spec? "(100)")
+           ]
+ 
+}
 
 @section[#:tag "ref-site-feeds"]{Feeds}
 
 Each @tt{[[feeds]]} entry defines an RSS or Atom feed:
 
-@tabular[#:sep @hspace[2]
+@tabular[#:style 'boxed
+         #:pad '(1 0)
+         #:row-properties '(bottom-border ())
          (list (list @bold{Field} @bold{Type} @bold{Description})
-               (list @racket[filename] "string" "Output filename (.atom or .rss)")
-               (list @racket[collections] "array" "Collection names to include")
-               (list @racket[render-with] "datum" "Feed content render function"))]
+               (list @racket[filename] @racket[feed-filename?] "Output filename (.atom or .rss)")
+               (list @racket[collections] @racket[(listof string?)] "Collection names to include")
+               (list @racket[render-with] @racket[render-spec?] "Feed content render function"))]
 
-The feed render function has the same signature as page render functions:
+Each feed's @racket[_render-with] value should identify a function with the same signature as page
+render functions:
 
 @codeblock|{
 (define (feed-content doc ctxt)
@@ -86,8 +175,21 @@ The feed render function has the same signature as page render functions:
             (p (a ((href ,(context-url ctxt))) "Read more..."))))
 }|
 
-The @racket[ctxt] provides access to the page's canonical URL, enabling feed content to include
-links back to the original page on your site.
+The @racket[ctxt] argument is a @racket[context] whch provides access to the page's canonical URL,
+enabling feed content to include links back to the original page on your site.
+
+@defproc[(feed-filename? [v any/c]) boolean?]{
+                                              
+ Returns @racket[#t] if @racket[_v] is a string ending in @filepath{.atom} or @filepath{.rss}.
+
+@examples[
+ #:eval e
+ (feed-filename? "posts.atom")
+ (feed-filename? "blog.rss")
+ (feed-filename? "comments")]
+         
+}
+
 
 @;------------------------------------------------
 @section[#:tag "ref-path-mapping"]{Source/Output Path Mapping}
@@ -119,8 +221,18 @@ path patterns:
  ]
 
 @defproc[(source-path-pattern? [v any/c]) boolean?]{
-Returns @racket[#t] if @racket[_v] is a valid @tech{source path pattern}: a relative path string
-that does not contain @tt{.} or @tt{..} components, and whose final element is @tt{*}.}
+ 
+ Returns @racket[#t] if @racket[_v] is a valid @tech{source path pattern}: a relative path string
+ that does not contain @tt{.} or @tt{..} components, and whose final element is @litchar{*}.
+
+ @examples[
+ #:eval e
+ (source-path-pattern? "writing/*")
+ (source-path-pattern? "/writing/*")
+ (source-path-pattern? "writing/")
+ (source-path-pattern? "../writing/*")]
+ 
+}
 
 @defproc[(output-path-pattern? [v any/c]) boolean?]{
                                                     
@@ -160,7 +272,15 @@ Returns @racket[#t] if @racket[_v] is a valid file extension: a string or byte s
 @tt{.} and containing no directory separators.}
 
 @defproc[(non-rkt-file-extension? [v any/c]) boolean?]{
-Returns @racket[#t] if @racket[_v] is a valid file extension other than @racket[".rkt"].}
+
+Returns @racket[#t] if @racket[_v] is a valid file extension other than @racket[".rkt"].
+
+@examples[
+ #:eval e
+ (non-rkt-file-extension? ".myformat.rkt")
+ (non-rkt-file-extension? ".rkt")]
+
+}
 
 @; =============================================================================
 @section[#:tag "ref-site-config"]{Site Configuration API}
