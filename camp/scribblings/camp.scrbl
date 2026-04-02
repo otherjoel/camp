@@ -39,6 +39,8 @@ HTML that is line-wrapped and indented for high readability.}
 
 @inline-note{The canonical copy of this documentation is at @url{https://joeldueck.com/what-about/camp}.}
 
+@youtube-embed-element{https://www.youtube.com/embed/NGhXYoVbLVM}
+
 @local-table-of-contents[]
 
 @include-section["quickstart.scrbl"]

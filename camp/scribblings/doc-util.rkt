@@ -215,3 +215,15 @@
                                    (alt-tag "div")))
             (image-element plain '() name-id '() 0.4))))]))
 
+(define (youtube-embed-element src)
+  (element
+   (make-style
+    "youtube-embed"
+    (list
+     (make-alt-tag "iframe")
+     (make-attributes `((width           . "700")
+                        (height          . "394")
+                        (src             . ,src)
+                        (frameborder     . "0")
+                        (allowfullscreen . "")))))
+   ""))
