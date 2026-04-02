@@ -94,49 +94,63 @@ links back to the original page on your site.
 
 @declare-exporting[camp/main]
 
-Camp uses path patterns to map source files to output locations. 
+Camp uses path patterns to map source files to output locations.
 
 A @deftech{source path pattern} specifies where to find source documents within a collection (e.g.,
 @racket["blog/*"]). An @deftech{output path pattern} specifies the URL structure for rendered pages,
 with support for slug substitution and date-based paths (e.g., @racket["blog/[yyyy]/[MM]/*/"]).
 
 An @tech{output path pattern} specifies the folder/file structure (and thus the URL) for rendered
-pages, with support for slug substitution and date-based paths. In output path patterns:
+pages, with support for slug substitution, date-based paths, and meta value interpolation. In output
+path patterns:
 
-@itemlist[#:style 'compact
-
-@item{Any folder name consisting only of @litchar{*} will be replaced by the source’s @tech{slug}.}
-
-@item{Any folder name consisting of valid CIDR syntax inside a pair of brackets @litchar{[]} will be
-replaced by a string of the corresponding info from the source’s @tt{date} meta.}
-
-@item{If the pattern ends in a trailing slash @litchar{/}, the output file will be named
-@filepath{index.html}. Otherwise the output is the name of the pattern’s final element with an
-added @filepath{.html} extension.}
-
-]
+@itemlist[
+ @item{Any folder name consisting only of @litchar{*} will be replaced by the source’s @tech{slug}.}
+  
+ @item{Any name inside a pair of brackets @litchar{[]} will first be looked up as a key in the
+  source’s metadata. If a matching meta key is found, the bracket is replaced by that value. Otherwise,
+  the name is interpreted as a CLDR date format code and formatted using the source’s @tt{date} meta.}
+ 
+ @item{If the pattern ends in a trailing slash @litchar{/}, the output file will be named
+  @filepath{index.html}. Otherwise the output is the name of the pattern’s final element with an
+  added @filepath{.html} extension.}
+ 
+ @item{A pattern must contain at least one @litchar{*} or @litchar{[]} element.}
+ ]
 
 @defproc[(source-path-pattern? [v any/c]) boolean?]{
 Returns @racket[#t] if @racket[_v] is a valid @tech{source path pattern}: a relative path string
 that does not contain @tt{.} or @tt{..} components, and whose final element is @tt{*}.}
 
 @defproc[(output-path-pattern? [v any/c]) boolean?]{
-Returns @racket[#t] if @racket[_v] is a valid @tech{output path pattern}: a relative path string
-that does not contain @tt{.} or @tt{..} components, contains at least one @tt{*} element, and
-where any bracketed patterns (e.g., @tt{[yyyy]}) are valid CLDR date format codes.}
+                                                    
+ Returns @racket[#t] if @racket[_v] is a valid @tech{output path pattern}: a relative path string
+ that does not contain @tt{.} or @tt{..} components, and contains at least one @tt{*} element or
+ bracketed pattern.
+ 
+ @examples[
+ #:eval e
+ (output-path-pattern? "posts/*/")
+ (output-path-pattern? "posts/[YYYY]/*/")
+ (output-path-pattern? "../posts/*/")
+ (output-path-pattern? "posts/")]
+
+}
 
 @defproc[(format-output-path [pattern output-path-pattern?]
-                              [slug string?]
-                              [date (or/c date-provider? #f)])
+                             [slug string?]
+                             [date (or/c date-provider? #f)]
+                             [metas (or/c hash? #f)])
          path?]{
 Applies an @tech{output path pattern} to produce an output file path. The @racket[_slug] replaces
-@tt{*} in the pattern, and @racket[_date] (if provided) is used for any bracketed date codes.
-
-If the pattern contains date codes but @racket[_date] is @racket[#f], an error is raised.
+@tt{*} in the pattern. Bracketed patterns are resolved by first checking @racket[_metas] for a
+matching key; if no match is found, the pattern is interpreted as a CLDR date code and formatted
+using @racket[_date].
 
 @examples[#:eval e
-(format-output-path "posts/*/" "hello-world" #f)
-(format-output-path "blog/[yyyy]/[MM]/*/" "my-post" (date 2025 1 15))
+(format-output-path "posts/*/" "hello-world" #f #f)
+(format-output-path "blog/[yyyy]/[MM]/*/" "my-post" (date 2025 1 15) #f)
+(format-output-path "newsletter/[issue]/*/" "my-post" #f (hasheq 'issue 42))
 ]
 
 }

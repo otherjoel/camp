@@ -79,7 +79,7 @@
     (define date-val (get-page-date-val doc))
     (define url
       (with-handlers ([exn:fail? (λ (_) (path->string (file-name-from-path p)))])
-        (output-path->url (format-output-path output-pattern slug date-val))))
+        (output-path->url (format-output-path output-pattern slug date-val (document-metas doc)))))
     (vector (or (meta-ref doc 'date) "")
             (or (meta-ref doc 'title) "Untitled")
             url

@@ -116,15 +116,30 @@
 
   (define sorted-pages (sort-pages raw-pages coll))
 
-  (for/list ([raw-page (in-list sorted-pages)])
-    (match-define (list source-path slug doc) raw-page)
-    (define date-val (get-page-date doc))
-    (define output-path
-      (let ([override (meta-ref doc 'output-path)])
-        (if override
-            (normalize-output-path override)
-            (format-output-path output-pattern slug date-val))))
-    (page source-path output-path doc slug coll-name)))
+  (define pages
+    (for/list ([raw-page (in-list sorted-pages)])
+      (match-define (list source-path slug doc) raw-page)
+      (define date-val (get-page-date doc))
+      (define output-path
+        (let ([override (meta-ref doc 'output-path)])
+          (if override
+              (normalize-output-path override)
+              (format-output-path output-pattern slug date-val (document-metas doc)))))
+      (page source-path output-path doc slug coll-name)))
+
+  (define seen (make-hash))
+  (for ([p (in-list pages)])
+    (define op (page-output-path p))
+    (define existing (hash-ref seen op #f))
+    (when existing
+      (error 'collect-collection
+             "duplicate output path ~a in collection ~s\n  ~a\n  ~a"
+             op coll-name
+             (page-source-path existing)
+             (page-source-path p)))
+    (hash-set! seen op p))
+
+  pages)
 
 (define (get-page-date doc)
   (define raw-date (meta-ref doc 'date))

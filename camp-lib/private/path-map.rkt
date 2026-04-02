@@ -2,6 +2,7 @@
 
 (require gregor
          racket/contract
+         racket/format
          racket/list
          racket/path
          racket/string)
@@ -14,7 +15,9 @@
           [format-output-path (-> output-path-pattern?
                                   string?
                                   (or/c date-provider? #f)
-                                  path?)]))
+                                  (or/c hash? #f)
+                                  path?)]
+          [pattern-meta-keys (-> string? (listof string?))]))
 
 ;; ---------------------------------------------------------------------------
 ;; Internal helpers
@@ -24,22 +27,8 @@
 (define (wildcard? p)
   (equal? *wildcard (if (path? p) p (string->path p))))
 
-(define (extract-bracketed-patterns str)
-  (regexp-match* #rx"\\[([^][]+)\\]" str #:match-select cadr))
-
 (define (contains-brackets? str)
-  (regexp-match? #rx"\\[[^][]+\\]" str))
-
-(define (all-brackets-valid-cldr? str)
-  (define patterns (extract-bracketed-patterns str))
-  (for/and ([pattern (in-list patterns)])
-    (with-handlers ([exn:gregor:invalid-pattern? (λ (_) #f)]
-                    [exn:fail:contract? (λ (_) #f)])
-      (~t (date 2025 1 15) pattern)
-      #t)))
-
-(define (has-date-patterns? path-str)
-  (regexp-match? #rx"\\[[^][]+\\]" path-str))
+  (regexp-match? #rx"\\[[^][ \t][^][]*\\]" str))
 
 ;; ---------------------------------------------------------------------------
 ;; Contracts
@@ -69,16 +58,13 @@
        [(not (equal? (if (string? v) (string->path v) v) (simplify-path v)))
         (λ (blame)
           (raise-blame-error blame v '(expected: "path without . or .." given: "~e") v))]
-       [(not (for/or ([part (in-list (explode-path v))])
-               (wildcard? part)))
-        (λ (blame)
-          (raise-blame-error blame v '(expected: "path containing * element" given: "~e") v))]
-       [(not (for/and ([part (in-list (map path->string (explode-path v)))])
-               (all-brackets-valid-cldr? part)))
+       [(not (or (for/or ([part (in-list (explode-path v))])
+                   (wildcard? part))
+                 (contains-brackets? (if (string? v) v (path->string v)))))
         (λ (blame)
           (raise-blame-error
            blame v
-           '(expected: "bracketed patterns to be valid CLDR date formats"
+           '(expected: "path containing * element or [bracket] pattern"
              given: "~e") v))]
        [else #t]))
    #:name 'output-path-pattern?))
@@ -113,22 +99,41 @@
    #:name 'non-rkt-file-extension?))
 
 ;; ---------------------------------------------------------------------------
+;; Pattern introspection
+
+(define (pattern-meta-keys pattern)
+  (define all-brackets (regexp-match* #rx"\\[([^][]+)\\]" pattern #:match-select cadr))
+  (for/list ([b (in-list all-brackets)]
+             #:unless (with-handlers ([exn? (λ (_) #f)])
+                        (~t (date 2025 1 15) b)
+                        #t))
+    b))
+
+;; ---------------------------------------------------------------------------
 ;; Path formatting
 
-(define (format-brackets str date-val)
-  (regexp-replace* #rx"\\[([^][]+)\\]"
-                   str
-                   (λ (full pattern)
-                     (~t date-val pattern))))
+(define (resolve-bracket pattern metas date-val)
+  (define meta-val (and metas (hash-ref metas (string->symbol pattern) #f)))
+  (cond
+    [meta-val (~a meta-val)]
+    [date-val
+     (with-handlers ([exn? (λ (_)
+                             (error 'format-output-path
+                                    "no meta '~a' found and [~a] is not a valid date code"
+                                    pattern pattern))])
+       (~t date-val pattern))]
+    [else
+     (error 'format-output-path
+            "no meta '~a' found and no date provided to resolve [~a]"
+            pattern pattern)]))
 
-(define (format-output-path pattern slug date-val)
+(define (resolve-brackets str metas date-val)
+  (regexp-replace* #rx"\\[([^][]+)\\]" str
+                   (λ (full pattern) (resolve-bracket pattern metas date-val))))
+
+(define (format-output-path pattern slug date-val metas)
   (define p (string->path pattern))
   (define-values (_base _name final-slash?) (split-path p))
-
-  (when (and (not date-val) (has-date-patterns? pattern))
-    (error 'format-output-path
-           "output pattern ~s contains date codes but no date was provided"
-           pattern))
 
   (define parts (explode-path (simplify-path p #f)))
   (define formatted-parts
@@ -137,8 +142,8 @@
       (string->path
        (cond
          [(wildcard? part) slug]
-         [(and (contains-brackets? part-str) date-val)
-          (format-brackets part-str date-val)]
+         [(contains-brackets? part-str)
+          (resolve-brackets part-str metas date-val)]
          [else part-str]))))
 
   (define new-path (apply build-path formatted-parts))

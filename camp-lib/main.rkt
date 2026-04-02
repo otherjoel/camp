@@ -79,4 +79,6 @@
  [format-output-path (-> output-path-pattern?
                          string?
                          (or/c date-provider? #f)
-                         path?)])
+                         (or/c hash? #f)
+                         path?)]
+ [pattern-meta-keys (-> string? (listof string?))])

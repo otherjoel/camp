@@ -173,7 +173,7 @@
 (check-true (output-path-pattern? "blog/*/"))
 (check-true (output-path-pattern? "blog/[yyyy]/[MM]/*/"))
 (check-false (output-path-pattern? "no-wildcard"))
-(check-false (output-path-pattern? "blog/[invalid]/*/"))
+(check-true (output-path-pattern? "blog/[invalid]/*/"))
 
 ;; file-extension?
 (check-true (file-extension? ".md.rkt"))
@@ -185,7 +185,7 @@
 (check-false (non-rkt-file-extension? ".rkt"))
 
 ;; format-output-path
-(check-equal? (format-output-path "posts/*/" "hello" #f)
+(check-equal? (format-output-path "posts/*/" "hello" #f #f)
               (string->path "posts/hello/index.html"))
-(check-equal? (format-output-path "blog/[yyyy]/[MM]/*/" "my-post" test-date)
+(check-equal? (format-output-path "blog/[yyyy]/[MM]/*/" "my-post" test-date #f)
               (string->path "blog/2025/01/my-post/index.html"))
