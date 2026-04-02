@@ -9,7 +9,8 @@
 (define version "1.0")
 (define pkg-authors '("Joel Dueck"))
 (define license 'LicenseRef-CreatorCxn-1.0)
-(define build-deps '("hash-view-scribble"
+(define build-deps '("toml-config-lib"
+                     "hash-view-scribble"
                      "scribble-doc"
                      "debug"
                      "gregor-doc"
