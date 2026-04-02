@@ -344,7 +344,8 @@ Add the feed renderer to @filepath{render.rkt}:
   (camp-doc->html-xexpr doc))
 }}
 
-Posts missing a @tt{date} or marked @tt{draft: true} are excluded from feeds.
+Posts missing a @tt{date} key, or whose metadata contains a @tt{draft?} key with any
+non-@racket[#f] value, are excluded from feeds.
 
 @section[#:tag "blog-whats-next"]{What's next}
 

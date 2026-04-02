@@ -50,7 +50,8 @@
  [load-book (-> path-string? book?)]
  [get-collection (->* (string?)
                       (#:limit (or/c #f exact-positive-integer?)
-                       #:full-docs? boolean?)
+                       #:full-docs? boolean?
+                       #:include-drafts? any/c)
                       list?)]
  [get-taxonomy-terms (-> string? string? (listof string?))]
  [get-taxonomy-pages (->* (string? string?)

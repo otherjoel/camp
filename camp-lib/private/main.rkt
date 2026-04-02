@@ -120,18 +120,28 @@
 
 (define (get-collection name
                         #:limit [limit #f]
-                        #:full-docs? [full-docs? #f])
+                        #:full-docs? [full-docs? #f]
+                        #:include-drafts? [include-drafts? #f])
   (define info (current-site-info))
   (unless info
     (error 'get-collection "no site-info available (not in build context)"))
-  (define result
+  (define raw
     (if full-docs?
         (hash-ref (site-info-pages-by-collection info) name '())
         (hash-ref (site-info-page-links-by-collection info) name '())))
+  (define filtered
+    (if include-drafts?
+        raw
+        (filter (λ (item)
+                  (not (hash-ref (if full-docs?
+                                     (document-metas (page-doc item))
+                                     (page-link-metas item))
+                                 'draft? #f)))
+                raw)))
   (define limited
-    (if (and limit (> (length result) limit))
-        (take result limit)
-        result))
+    (if (and limit (> (length filtered) limit))
+        (take filtered limit)
+        filtered))
   (if full-docs?
       (map page-doc limited)
       limited))

@@ -41,7 +41,7 @@
    (λ ()
      (define blog-pages (get-collection "blog"))
      (check-pred list? blog-pages)
-     (check-equal? (length blog-pages) 4)  ; includes draft post
+     (check-equal? (length blog-pages) 3)  ; excludes draft post by default
      (for ([pl (in-list blog-pages)])
        (check-pred page-link? pl)))))
 
@@ -49,9 +49,9 @@
   (call-with-site-info
    (λ ()
      (define blog-pages (get-collection "blog"))
-     ;; Blog is sorted descending by date (draft is most recent)
+     ;; Blog is sorted descending by date; draft excluded by default
      (define titles (map page-link-title blog-pages))
-     (check-equal? titles '("Draft Post" "Third Post" "Second Post" "First Post")))))
+     (check-equal? titles '("Third Post" "Second Post" "First Post")))))
 
 (test-case "get-collection: respects #:limit"
   (call-with-site-info
@@ -59,20 +59,20 @@
      (define blog-pages (get-collection "blog" #:limit 2))
      (check-equal? (length blog-pages) 2)
      (define titles (map page-link-title blog-pages))
-     (check-equal? titles '("Draft Post" "Third Post")))))
+     (check-equal? titles '("Third Post" "Second Post")))))
 
 (test-case "get-collection: #:limit larger than collection returns all"
   (call-with-site-info
    (λ ()
      (define blog-pages (get-collection "blog" #:limit 100))
-     (check-equal? (length blog-pages) 4))))
+     (check-equal? (length blog-pages) 3))))
 
 (test-case "get-collection: #:full-docs? returns documents"
   (call-with-site-info
    (λ ()
      (define docs (get-collection "blog" #:full-docs? #t))
      (check-pred list? docs)
-     (check-equal? (length docs) 4)
+     (check-equal? (length docs) 3)
      (for ([doc (in-list docs)])
        (check-pred document? doc)))))
 
@@ -95,6 +95,31 @@
   (call-with-site-info
    (λ ()
      (check-equal? (get-collection "nonexistent") '()))))
+
+(test-case "get-collection: #:include-drafts? includes draft pages"
+  (call-with-site-info
+   (λ ()
+     (define blog-pages (get-collection "blog" #:include-drafts? #t))
+     (check-equal? (length blog-pages) 4)
+     (define titles (map page-link-title blog-pages))
+     (check-not-false (member "Draft Post" titles)))))
+
+(test-case "get-collection: #:include-drafts? with #:full-docs?"
+  (call-with-site-info
+   (λ ()
+     (define docs (get-collection "blog" #:include-drafts? #t #:full-docs? #t))
+     (check-equal? (length docs) 4)
+     (for ([doc (in-list docs)])
+       (check-pred document? doc)))))
+
+(test-case "get-collection: #:limit applies after draft filtering"
+  (call-with-site-info
+   (λ ()
+     (define blog-pages (get-collection "blog" #:limit 2))
+     (define titles (map page-link-title blog-pages))
+     (check-equal? (length blog-pages) 2)
+     (for ([title (in-list titles)])
+       (check-not-equal? title "Draft Post")))))
 
 ;; ===========================================================================
 ;; get-taxonomy-terms tests

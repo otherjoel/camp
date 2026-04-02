@@ -87,11 +87,16 @@ Must be called within a build context (i.e., when @racket[current-site-info] is 
 
 @defproc[(get-collection [name string?]
                          [#:limit limit (or/c #f exact-positive-integer?) #f]
-                         [#:full-docs? full-docs? boolean? #f])
+                         [#:full-docs? full-docs? boolean? #f]
+                         [#:include-drafts? include-drafts? any/c #f])
          list?]{
 Retrieves pages from a named collection. Returns a list of @racket[page-link] structs by default,
 or full Punct documents if @racket[_full-docs?] is @racket[#t]. The optional @racket[_limit]
-restricts the number of results returned.}
+restricts the number of results returned.
+
+Pages whose metadata contains a @tt{draft?} key with any non-@racket[#f] value are excluded by
+default. Pass a true value for @racket[_include-drafts?] to include them. The @racket[_limit] is
+applied after draft filtering.}
 
 @section[#:tag "ref-taxonomy-functions"]{Taxonomy Functions}
 
