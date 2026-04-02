@@ -1,6 +1,7 @@
 #lang scribble/manual
 
-@(require racket/runtime-path
+@(require "doc-util.rkt"
+          racket/runtime-path
           ;uncomment if you end up using #:style below
           ;scribble/core
           ;scribble/html-properties
@@ -39,7 +40,11 @@ The toolbar buttons are pretty straightforward:
 @item{@onscreen{New page}: Prompts you for metadata for the new page. If the current folder’s
 @tech{collection} has any taxonomies defined, you can specify those as well.}
                                                             
- @item{@onscreen{Build site}: Same effect as running @secref["cli-build"].}
+ @item{@onscreen{Build site}: Same effect as running @secref["cli-build"]. Hold @kbd{⌘} while
+ clicking to do a @deftech{full rebuild}: the build runs in a separate process, guaranteeing that all
+ modules are loaded fresh. Use this if you suspect a change isn't being picked up by a normal build.
+ A full rebuild is also available from @onscreen{File} menu → @onscreen{Full Rebuild}
+ (or @kbd{⌘}@kbd{⇧}@kbd{B}).}
  
  @item{@onscreen{Start/Stop Preview}: Starts/stops the local server for previewing the site. While 
  the server is running, any changed files are rebuilt automatically. A new browser tab is opened to

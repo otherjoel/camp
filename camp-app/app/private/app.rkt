@@ -21,6 +21,7 @@
          racket/runtime-path
          racket/string
          racket/vector
+         setup/dirs
          setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
@@ -440,8 +441,48 @@
               (log-msg "Deploy complete")
               (log-msg "Deploy failed (exit code ~a)" exit-code))))])))
 
+(define cmd-held? (box #f))
+
+(define build-button-mixin
+  (λ (%)
+    (class %
+      (super-new)
+      (define/override (on-subwindow-event receiver event)
+        (when (is-a? event mouse-event%)
+          (set-box! cmd-held? (send event get-meta-down)))
+        (super on-subwindow-event receiver event)))))
+
+(define (full-rebuild!)
+  (define site (obs-peek @site))
+  (when site
+    (define site-arg
+      (let ([spec (obs-peek @site-selection)])
+        (cond [(symbol? spec) (symbol->string spec)]
+              [(path? spec) (path->string spec)]
+              [else (~a spec)])))
+    (log-msg "Full rebuild (subprocess)...")
+    (define-values (sp out in err)
+      (subprocess #f #f #f
+                  (path->string (build-path (find-console-bin-dir) "raco"))
+                  "camp" "build" "--verbose" site-arg))
+    (close-output-port in)
+    (define err-thread
+      (thread (λ ()
+                (for ([line (in-lines err)]) (log-msg "  ~a" line))
+                (close-input-port err))))
+    (for ([line (in-lines out)]) (log-msg "  ~a" line))
+    (close-input-port out)
+    (thread-wait err-thread)
+    (subprocess-wait sp)
+    (define exit-code (subprocess-status sp))
+    (if (zero? exit-code)
+        (log-msg "Full rebuild complete")
+        (log-msg "Full rebuild failed (exit code ~a)" exit-code))))
+
 (define (on-build-click)
-  (thread build-site!))
+  (if (unbox cmd-held?)
+      (thread full-rebuild!)
+      (thread build-site!)))
 
 (define :startstop-button
   (button (if bmp-start (list bmp-start "Start preview" 'top) "Start preview")
@@ -465,7 +506,12 @@
   (hpanel
    #:stretch '(#t #f)
    (toolbar-button "New page" on-new-page-click #:icon bmp-new-page #:enabled? @has-site?)
-   (toolbar-button "Build site" on-build-click #:icon bmp-build #:enabled? @has-site?)
+   (button (if bmp-build (list bmp-build "Build site" 'top) "Build site")
+           on-build-click
+           #:enabled? @has-site?
+           #:min-size button-size
+           #:style '(multi-line)
+           #:mixin build-button-mixin)
    :startstop-button
    (button (if bmp-publish (list bmp-publish "Publish" 'top) "Publish")
           on-publish-click
@@ -498,6 +544,9 @@
    (menu
     "File"
     (menu-item "New page" on-new-page-click #:shortcut '(cmd #\N) #:enabled? @has-site?)
+    (menu-item-separator)
+    (menu-item "Build" (λ () (thread build-site!)) #:shortcut '(cmd #\B) #:enabled? @has-site?)
+    (menu-item "Full Rebuild" (λ () (thread full-rebuild!)) #:shortcut '(cmd shift #\B) #:enabled? @has-site?)
     (menu-item-separator)
     (menu-item "Add site…" on-add-site)
     (menu-item "Remove this site…" on-remove-site)
@@ -536,27 +585,41 @@
   (define/obs @date (date->string (current-date) "~Y-~m-~d"))
   (define/obs @slug "")
 
-  ;; Determine taxonomies and output pattern for the current collection
+  ;; Determine taxonomies, output-pattern meta keys, and output pattern
   (define site (obs-peek @site))
   (define folder (obs-peek @folder-selection))
   (define coll (and site folder (folder->collection site folder)))
   (define taxonomy-names (if coll (collection-taxonomies coll) '()))
-  (define taxonomy-obs
-    (for/list ([name (in-list taxonomy-names)])
-      (cons name (@ ""))))
   (define output-pattern (and coll (collection-output-paths coll)))
+  (define path-meta-names (if output-pattern (pattern-meta-keys output-pattern) '()))
+
+  ;; Unified meta names: taxonomies + path metas, deduplicated, preserving order
+  (define all-meta-names
+    (remove-duplicates (append taxonomy-names path-meta-names)))
+  (define meta-obs
+    (for/list ([name (in-list all-meta-names)])
+      (cons name (@ ""))))
+
+  (define (peek-metas-hash)
+    (for/hasheq ([pair (in-list meta-obs)]
+                 #:unless (string=? (obs-peek (cdr pair)) ""))
+      (values (string->symbol (car pair)) (obs-peek (cdr pair)))))
 
   (define @url-preview
-    (obs-combine
-     (λ (title date slug)
+    (apply obs-combine
+     (λ (title date slug . _meta-vals)
        (define actual-slug (normalize-slug (if (non-empty-string? slug) slug title)))
        (if (and output-pattern (non-empty-string? actual-slug))
            (with-handlers ([exn:fail? (λ (_) "")])
              (define date-val
                (and (non-empty-string? date) (iso8601->date date)))
-             (output-path->url (format-output-path output-pattern actual-slug date-val)))
+             (define metas (peek-metas-hash))
+             (output-path->url
+              (format-output-path output-pattern actual-slug date-val
+                                  (if (hash-empty? metas) #f metas))))
            ""))
-     @title @date @slug))
+     @title @date @slug
+     (map cdr meta-obs)))
 
   (define (create-page)
     (when (and site folder)
@@ -567,8 +630,8 @@
       (define filename (string-append (normalize-slug title) source-ext))
       (define filepath (build-path folder filename))
 
-      (define taxonomy-lines
-        (for/list ([pair (in-list taxonomy-obs)]
+      (define meta-lines
+        (for/list ([pair (in-list meta-obs)]
                    #:unless (string=? (obs-peek (cdr pair)) ""))
           (format "~a: ~a\n" (car pair) (obs-peek (cdr pair)))))
 
@@ -580,7 +643,7 @@
          (format "title: ~a\n" title)
          (format "date: ~a\n" date)
          (if (non-empty-string? slug) (format "slug: ~a\n" slug) "")
-         (apply string-append taxonomy-lines)
+         (apply string-append meta-lines)
          "---\n\n"
          "Write your content here.\n"))
 
@@ -601,10 +664,10 @@
          (input @date (λ (_action s) (@date . := . s)) #:label "Date")
          (input @slug (λ (_action s) (@slug . := . s)) #:label "Slug (optional)")
          (text @url-preview))
-       (for/list ([pair (in-list taxonomy-obs)])
+       (for/list ([pair (in-list meta-obs)])
          (input (cdr pair)
                 (λ (_action s) ((cdr pair) . := . s))
-                #:label (format "~a (optional)" (string-titlecase (car pair)))))
+                #:label (string-titlecase (car pair))))
        (list
          (hpanel
            (button "Create" create-page)
