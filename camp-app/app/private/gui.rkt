@@ -84,6 +84,12 @@
                (define/augment (can-insert? _start _len)
                  allow-change?))))
 
+      ;; Standard bindings (⌘C copy, ⌘A select all, …) and the right-click
+      ;; editor-operations menu; without a keymap a bare text% has neither
+      (define keymap (new keymap%))
+      ((current-text-keymap-initializer) keymap)
+      (send editor set-keymap keymap)
+
       (define s-l (send editor get-style-list))
       (define basic-style (send s-l find-named-style (send editor default-style-name)))
       (define mono-delta (make-object style-delta% 'change-size 11))
