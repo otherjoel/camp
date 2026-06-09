@@ -15,6 +15,7 @@
          is-source?
          find-sources
          in-sources
+         load-doc
          path->slug
          parse-sort-value
          sort-pages
@@ -64,6 +65,17 @@
   (regexp-replace (regexp ext-pattern) filename ""))
 
 ;; ---------------------------------------------------------------------------
+;; Source Loading
+
+;; Unlike punct's get-doc, registers the module with rerequire so later edits
+;; to the source are picked up within a long-running process. A source module
+;; first loaded any other way can never be reloaded in that process, so all
+;; doc loading must go through this function.
+(define (load-doc p)
+  (dynamic-rerequire p)
+  (dynamic-require p 'doc))
+
+;; ---------------------------------------------------------------------------
 ;; Source Iteration
 
 (define (in-sources root source-extension)
@@ -73,7 +85,7 @@
      (values
       (lambda (idx)
         (define p (list-ref paths idx))
-        (define doc (begin (dynamic-rerequire p) (dynamic-require p 'doc)))
+        (define doc (load-doc p))
         (define slug (or (meta-ref doc 'slug)
                          (path->slug p source-extension)))
         (values p slug doc))

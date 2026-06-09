@@ -5,7 +5,7 @@
 (require camp
          (only-in camp/private/build output-path->url)
          punct/doc
-         punct/fetch
+         (only-in punct/fetch meta-ref)
          (only-in gregor iso8601->date date-provider?)
          racket/exn
          racket/list
@@ -13,7 +13,7 @@
          racket/string
          racket/vector
          camp/app/private/gui
-         (only-in camp/private/collections is-source? path->slug))
+         (only-in camp/private/collections is-source? path->slug load-doc))
 
 (provide (all-from-out camp) ; includes resolve-site-spec
          source-pattern->directory
@@ -92,4 +92,4 @@
                               (file-name-from-path src-file)
                               (exn-message e))
                      (document (hasheq 'here-path src-file 'title "Error") '() '()))])
-    (get-doc src-file)))
+    (load-doc src-file)))
