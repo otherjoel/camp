@@ -51,7 +51,10 @@ Camp is likely to be a good fit for you if:
           
 @item{@bold{You want to dual-publish the same writings to the web and to print.} Camp’s processing
 pipeline is partly designed to handle the complexity inherent in publishing to multiple output
-formats.If you don’t care about this, you will probably find aspects of Camp a little bizarre.}
+formats. If you don’t care about this, you will probably find certain parts of Camp a little
+complicated at first. Camp works just fine for web-only projects, but it wants you to at least
+consider, at the start of your project, whether you might someday want to publish to print as
+well as to the web.}
 
 @item{@bold{The thing you want to publish is more like a book than an app, and more like a blog than a
 book.} Camp is for publishing open-ended collections of writing. It makes authoring more like
