@@ -1,6 +1,7 @@
 #lang info
 (define collection "camp")
 (define deps '("base"
+               "camp-app"
                "camp-lib"
                "gregor-lib"
                "rackunit-lib"))
