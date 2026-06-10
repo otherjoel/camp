@@ -11,7 +11,7 @@
          racket/match
          racket/path
          racket/port
-         racket/rerequire
+         "rerequire.rkt"
          racket/string
          racket/system
          racket/vector
@@ -239,6 +239,11 @@
   (define site-config-path
     (simplify-path (path->complete-path (resolve-site-spec/cli remaining))))
 
+  ;; Watching reloads site modules in-process, so site bytecode must be
+  ;; cleared as the site loads (see camp/private/rerequire)
+  (when watch?
+    (live-reload? #t))
+
   (define current-site #f)
 
   (define (reload-site!)
@@ -283,13 +288,13 @@
       (define spec (collection-render-with coll))
       (when spec
         (with-handlers ([exn:fail? void])
-          (dynamic-rerequire (car spec)))))
+          (rerequire! (car spec)))))
     (for ([feed (in-list (site-feeds current-site))])
       (with-handlers ([exn:fail? void])
-        (dynamic-rerequire (car (feed-config-render-with feed)))))
+        (rerequire! (car (feed-config-render-with feed)))))
     (when (site-default-render current-site)
       (with-handlers ([exn:fail? void])
-        (dynamic-rerequire (car (site-default-render current-site))))))
+        (rerequire! (car (site-default-render current-site))))))
 
   (unless (directory-exists? (get-output-dir))
     (log-camp-info (~a "  " (dim "Output folder not found, building...")))

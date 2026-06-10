@@ -4,7 +4,7 @@
          racket/list
          racket/match
          racket/path
-         racket/rerequire
+         "rerequire.rkt"
          racket/string
          punct/fetch
          punct/doc
@@ -72,7 +72,7 @@
 ;; first loaded any other way can never be reloaded in that process, so all
 ;; doc loading must go through this function.
 (define (load-doc p)
-  (dynamic-rerequire p)
+  (rerequire! p)
   (dynamic-require p 'doc))
 
 ;; ---------------------------------------------------------------------------

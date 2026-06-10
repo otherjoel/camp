@@ -17,7 +17,7 @@
          racket/list
          racket/match
          racket/path
-         racket/rerequire
+         (only-in camp/private/rerequire rerequire! live-reload?)
          racket/runtime-path
          racket/string
          racket/vector
@@ -28,6 +28,10 @@
          camp/app/private/site-utils)
 
 (provide run-app)
+
+;; The app reloads site modules in-process for its lifetime, so site
+;; bytecode must be cleared as sites load (see camp/private/rerequire)
+(live-reload? #t)
 
 ;; ============================================================================
 ;; Helper functions
@@ -80,22 +84,23 @@
 ;;
 ;; The site observable is the foundation - everything else derives from it.
 
-(define @site
-  (obs-map @site-selection
-           (λ (spec)
-             (and spec
-                  (with-handlers ([exn:fail?
-                                   (λ (e)
-                                     (render (?dialog (format "Error loading site: ~a" (exn-message e))))
-                                     (remove-from-pref! @sites spec)
-                                     #f)])
-                    (define path (resolve-site-spec spec))
-                    (cond
-                      [(not path)
-                       (render (?dialog (format "Cannot resolve site: ~a" spec)))
-                       (remove-from-pref! @sites spec)
-                       #f]
-                      [else (load-site path)]))))))
+(define (load-site-from-spec spec)
+  (and spec
+       (with-handlers ([exn:fail?
+                        (λ (e)
+                          (render (?dialog (format "Error loading site: ~a" (exn-message e))))
+                          (remove-from-pref! @sites spec)
+                          #f)])
+         (define path (resolve-site-spec spec))
+         (cond
+           [(not path)
+            (render (?dialog (format "Cannot resolve site: ~a" spec)))
+            (remove-from-pref! @sites spec)
+            #f]
+           [else (load-site path)]))))
+
+(define/obs @site (load-site-from-spec (obs-peek @site-selection)))
+(obs-observe! @site-selection (λ (spec) (@site . := . (load-site-from-spec spec))))
 
 (define @site-root (obs-map @site (λ (s) (and s (site-root s)))))
 
@@ -120,6 +125,17 @@
       (build! site info)
       (define elapsed (- (current-inexact-milliseconds) start-time))
       (log-msg "Build complete (~ams)" (inexact->exact (round elapsed))))))
+
+;; For watcher-triggered config reloads: unlike load-site-from-spec, a config
+;; error (e.g. a half-saved edit) keeps the previous site instead of removing
+;; it from the app. Updating @site cascades into a rebuild via @folders.
+(define (reload-site!)
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (log-msg "Site config error (keeping previous config):\n~a" (exn->string e))
+                     #f)])
+    (@site . := . (load-site (resolve-site-spec (obs-peek @site-selection))))
+    #t))
 
 ;; ============================================================================
 ;; Refresh triggers and derived data
@@ -198,13 +214,13 @@
     (define spec (collection-render-with coll))
     (when spec
       (with-handlers ([exn:fail? void])
-        (dynamic-rerequire (car spec)))))
+        (rerequire! (car spec)))))
   (for ([feed (in-list (site-feeds site))])
     (with-handlers ([exn:fail? void])
-      (dynamic-rerequire (car (feed-config-render-with feed)))))
+      (rerequire! (car (feed-config-render-with feed)))))
   (when (site-default-render site)
     (with-handlers ([exn:fail? void])
-      (dynamic-rerequire (car (site-default-render site))))))
+      (rerequire! (car (site-default-render site))))))
 
 ;; ============================================================================
 ;; Components: Site selection
@@ -362,42 +378,54 @@
     [(obs-peek @stop-server-proc) #t]
     [else
      (define site (obs-peek @site))
-     (define output (obs-peek @output-folder))
+     (define server-output (obs-peek @output-folder))
      (cond
-       [(not (and site output)) #f]
+       [(not (and site server-output)) #f]
        [else
         (log-msg "Starting preview server (port ~a)" localhost-port)
-        (define shutdown-server (start-server output #:port localhost-port #:watch? #t))
+        (define shutdown-server (start-server server-output #:port localhost-port #:watch? #t))
 
-        ;; File watching
+        ;; File watching; the site is peeked per event (and per watcher
+        ;; iteration, for watch paths) so config reloads take effect live
         (define site-config-path
           (simplify-path (path->complete-path (resolve-site-spec (obs-peek @site-selection)))))
         (define manifest-path (make-temporary-file "camp-static-~a"))
 
         (define (handle-change changed-path)
-          (define rel (find-relative-path (site-root site) changed-path))
-          (define rel-str (if (equal? rel changed-path)
-                              (path->string (file-name-from-path changed-path))
-                              (path->string rel)))
-          (define change-type (path-change-type changed-path site site-config-path))
-          (log-msg "~a changed" rel-str)
-          (define-values (result rebuild-ms)
-            (with-timing
-              (case change-type
-                [(static)
-                 (define static-dir (build-path (site-root site) (site-static-folder site)))
-                 (with-handlers ([exn:fail? (λ (e) (log-msg "Static sync error:\n~a" (exn->string e)) #f)])
-                   (sync-static-files static-dir output manifest-path)
-                   #t)]
-                [(rkt)
-                 (rerequire-render-modules! site)
-                 (build-site!)
-                 #t]
-                [else (build-site!) #t])))
-          (when result
-            (log-msg "Done (~a)" (format-duration rebuild-ms))))
+          (define site (obs-peek @site))
+          (when site
+            (define output (obs-peek @output-folder))
+            (define rel (find-relative-path (site-root site) changed-path))
+            (define rel-str (if (equal? rel changed-path)
+                                (path->string (file-name-from-path changed-path))
+                                (path->string rel)))
+            (define change-type (path-change-type changed-path site site-config-path))
+            (log-msg "~a changed" rel-str)
+            (define-values (result rebuild-ms)
+              (with-timing
+                (case change-type
+                  [(config)
+                   (log-msg "Reloading site config...")
+                   (define ok? (reload-site!))
+                   (when (and ok? (not (equal? (obs-peek @output-folder) server-output)))
+                     (log-msg "Output folder changed; restart the preview server to serve it"))
+                   ok?]
+                  [(static)
+                   (define static-dir (build-path (site-root site) (site-static-folder site)))
+                   (with-handlers ([exn:fail? (λ (e) (log-msg "Static sync error:\n~a" (exn->string e)) #f)])
+                     (sync-static-files static-dir output manifest-path)
+                     #t)]
+                  [(rkt)
+                   (rerequire-render-modules! site)
+                   (build-site!)
+                   #t]
+                  [else (build-site!) #t])))
+            (when result
+              (log-msg "Done (~a)" (format-duration rebuild-ms)))))
 
-        (define watch-paths (get-watch-paths site site-config-path))
+        (define (watch-paths)
+          (define s (obs-peek @site))
+          (if s (get-watch-paths s site-config-path) '()))
         (define stop-watcher (start-watcher! watch-paths handle-change))
 
         (@stop-server-proc . := .

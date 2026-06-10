@@ -345,7 +345,18 @@ Loads a site configuration from a @hash-lang[] @racketmodname[camp/site] module.
   @item{A hash containing a @racket['path] key (such as a book configuration returned by
         @racket[load-book])---the site is discovered from the package's @filepath{info.rkt}}]
 Returns the parsed site configuration as a hash-view with an additional @racket['root] key
-containing the absolute path to the site's directory.}
+containing the absolute path to the site's directory.
+
+Calling @racket[load-site] again in the same process reflects any changes saved to the
+configuration module in the meantime; the GUI app and @tt{raco camp serve} rely on this to
+reload the site when its configuration changes.
+
+When called in a live-reloading context (the GUI app, or @tt{raco camp serve} with watching
+enabled), @racket[load-site] also deletes any compiled bytecode (@filepath{compiled} folders)
+under the site's directory, except within the output and static folders. Bytecode produced by
+@tt{raco setup} prevents modules from being reloaded after edits, so a live session must load
+site modules from source; one-shot commands like @tt{raco camp build} leave bytecode alone and
+use it as usual.}
 
 @defproc[(resolve-site-spec [spec (or/c path? string? symbol?)]) (or/c path? #f)]{
 Resolves a site specification to a path. The @racket[_spec] can be:

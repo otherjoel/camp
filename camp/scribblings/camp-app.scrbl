@@ -46,9 +46,16 @@ The toolbar buttons are pretty straightforward:
  A full rebuild is also available from @onscreen{File} menu → @onscreen{Full Rebuild}
  (or @kbd{⌘}@kbd{⇧}@kbd{B}).}
  
- @item{@onscreen{Start/Stop Preview}: Starts/stops the local server for previewing the site. While 
- the server is running, any changed files are rebuilt automatically. A new browser tab is opened to
- the localhost URL for the server every time the server is started.}
+ @item{@onscreen{Start/Stop Preview}: Starts/stops the local server for previewing the site. While
+ the server is running, changes are picked up automatically: edits to page sources and static files
+ trigger a rebuild or sync, as do edits to render modules, to @racket[_.rkt] modules in the site
+ root, and to the site config itself. (If a config edit fails to load, the error is logged and the
+ app keeps running with the previous config.) A new browser tab is opened to the localhost URL for
+ the server every time the server is started.
+
+ Two changes are @emph{not} picked up live: changing the site's output folder requires stopping and
+ restarting the preview server, and edits to helper modules in subfolders of the site root do not
+ trigger a rebuild by themselves (they are still reloaded as part of the next build).}
  
  @item{@onscreen{Publish}: Same effect as running @secref["cli-deploy"].}
  

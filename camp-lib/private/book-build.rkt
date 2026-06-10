@@ -10,7 +10,7 @@
          racket/list
          racket/path
          racket/port
-         racket/rerequire
+         "rerequire.rkt"
          racket/system
          punct/doc
          punct/fetch
@@ -34,7 +34,7 @@
     (simplify-path
      (path->complete-path
       (if (path? file-path) file-path (string->path file-path)))))
-  (dynamic-rerequire abs-path)
+  (rerequire! abs-path)
   (define book-config (dynamic-require abs-path 'toml))
   (hash-set book-config 'path abs-path))
 

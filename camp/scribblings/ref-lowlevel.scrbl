@@ -25,7 +25,12 @@ The @racketmodname[camp/build] module provides the two-pass build system for Cam
 @defproc[(collect [site site?]) site-info?]{
 Performs the collect pass over a site. Traverses all documents in each collection, building
 indexes for cross-reference resolution: a page index mapping slugs to URLs, a term index mapping
-term names to URL fragments, and taxonomy indexes for each collection.}
+term names to URL fragments, and taxonomy indexes for each collection.
+
+Source documents are loaded in a way that picks up changes between calls within the same
+process: if a source file (or a module it depends on) has been modified since a previous
+@racket[collect], the new version is used. This is what makes rebuilds in the GUI app and
+@tt{raco camp serve} reflect edits without restarting.}
 
 @defproc[(collect/call-with-page [site site?]
                                  [slug string?]

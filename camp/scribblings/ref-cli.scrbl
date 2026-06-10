@@ -67,6 +67,11 @@ site configuration. Changes trigger appropriate actions: source document or rend
 trigger a full rebuild, static file changes sync to the output folder, and configuration changes
 reload the site and rebuild.
 
+Watching also deletes any compiled bytecode (@filepath{compiled} folders) found under the site's
+directory, since modules first loaded from @tt{raco setup}-produced bytecode cannot be reloaded
+after edits. The site's modules are compiled from source for the duration of the session; this
+does not affect @tt{raco camp build}, which uses compiled bytecode normally.
+
 The server provides directory listings for folders without an @filepath{index.html} and returns
 a styled 404 page for missing files.
 

@@ -136,6 +136,8 @@
 ;; ---------------------------------------------------------------------------
 ;; File Watcher
 
+;; paths may be a thunk, re-consulted each iteration so the watch list can
+;; follow new files and site config changes without restarting the watcher
 (define (start-watcher! paths on-change #:debounce-ms [debounce-ms 1000])
   (define stop-flag (box #f))
   (define last-rebuild-end-time (box 0))
@@ -145,8 +147,9 @@
      (λ ()
        (let loop ()
          (unless (unbox stop-flag)
-           ;; Re-enumerate paths each iteration to catch new files
-           (define current-paths (filter file-or-directory-exists? paths))
+           (define current-paths
+             (filter file-or-directory-exists?
+                     (if (procedure? paths) (paths) paths)))
 
            (when (null? current-paths)
              (log-camp-warning "no paths to watch")
