@@ -25,7 +25,8 @@
          setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
-         camp/app/private/site-utils)
+         camp/app/private/site-utils
+         camp/app/private/subprocess-env)
 
 (provide run-app)
 
@@ -113,18 +114,28 @@
 ;; ============================================================================
 ;; Build
 
+;; Builds are serialized: the startup build, watcher rebuilds, and the Build
+;; button may otherwise interleave doc loads and output writes.
+(define build-sema (make-semaphore 1))
+
 (define (build-site!)
   (define site (obs-peek @site))
   (when site
-    (log-msg "Building site...")
-    (with-handlers ([exn:fail?
-                     (λ (e)
-                       (log-msg "Build error:\n~a" (exn->string e)))])
-      (define start-time (current-inexact-milliseconds))
-      (define info (collect site))
-      (build! site info)
-      (define elapsed (- (current-inexact-milliseconds) start-time))
-      (log-msg "Build complete (~ams)" (inexact->exact (round elapsed))))))
+    (call-with-semaphore
+     build-sema
+     (λ ()
+       (log-msg "Building site...")
+       (with-handlers ([exn:fail?
+                        (λ (e)
+                          (log-msg "Build error:\n~a" (exn->string e)))])
+         (define start-time (current-inexact-milliseconds))
+         (define info (collect site))
+         (build! site info)
+         (define elapsed (- (current-inexact-milliseconds) start-time))
+         (log-msg "Build complete (~ams)" (inexact->exact (round elapsed))))))))
+
+(define (build-site-async!)
+  (void (thread build-site!)))
 
 ;; For watcher-triggered config reloads: unlike load-site-from-spec, a config
 ;; error (e.g. a half-saved edit) keeps the previous site instead of removing
@@ -143,12 +154,12 @@
 (define/obs @refresh-counter 0)
 
 (define (trigger-refresh!)
-  (obs-update! @refresh-counter add1))
+  (obs-update! @refresh-counter add1)
+  (build-site-async!))
 
 (define @folders
   (obs-combine
    (λ (site _counter)
-     (when site (build-site!))
      (if site (get-source-folders site) (vector)))
    @site
    @refresh-counter))
@@ -229,7 +240,8 @@
   (log-msg "Switched to site: ~a" v)
   (mindful-demure-server-stop)
   (@site-selection . := . v)
-  (@folder-selection . := . (vec-ref? (obs-peek @folders) 0)))
+  (@folder-selection . := . (vec-ref? (obs-peek @folders) 0))
+  (build-site-async!))
 
 (define :sites-choice
   (choice @sites on-site-select
@@ -407,8 +419,10 @@
                   [(config)
                    (log-msg "Reloading site config...")
                    (define ok? (reload-site!))
-                   (when (and ok? (not (equal? (obs-peek @output-folder) server-output)))
-                     (log-msg "Output folder changed; restart the preview server to serve it"))
+                   (when ok?
+                     (unless (equal? (obs-peek @output-folder) server-output)
+                       (log-msg "Output folder changed; restart the preview server to serve it"))
+                     (build-site!))
                    ok?]
                   [(static)
                    (define static-dir (build-path (site-root site) (site-static-folder site)))
@@ -457,7 +471,8 @@
           (define output-folder (path->string (obs-peek @output-folder)))
           (define script-path (build-path root deploy-script))
           (define-values (sp out in err)
-            (parameterize ([current-directory root])
+            (parameterize ([current-directory root]
+                           [current-environment-variables (racket-subprocess-env)])
               (subprocess #f #f 'stdout (path->string script-path) output-folder)))
           (close-output-port in)
           (for ([line (in-lines out)])
@@ -490,9 +505,10 @@
               [else (~a spec)])))
     (log-msg "Full rebuild (subprocess)...")
     (define-values (sp out in err)
-      (subprocess #f #f #f
-                  (path->string (build-path (find-console-bin-dir) "raco"))
-                  "camp" "build" "--verbose" site-arg))
+      (parameterize ([current-environment-variables (racket-subprocess-env)])
+        (subprocess #f #f #f
+                    (path->string (build-path (find-console-bin-dir) "raco"))
+                    "camp" "build" "--verbose" site-arg)))
     (close-output-port in)
     (define err-thread
       (thread (λ ()
@@ -821,4 +837,6 @@
 
 (define (run-app)
   (application-about-handler (λ () (render (?about))))
+  (when (obs-peek @site)
+    (build-site-async!))
   (render §app))

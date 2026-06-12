@@ -352,11 +352,13 @@ configuration module in the meantime; the GUI app and @tt{raco camp serve} rely 
 reload the site when its configuration changes.
 
 When called in a live-reloading context (the GUI app, or @tt{raco camp serve} with watching
-enabled), @racket[load-site] also deletes any compiled bytecode (@filepath{compiled} folders)
-under the site's directory, except within the output and static folders. Bytecode produced by
-@tt{raco setup} prevents modules from being reloaded after edits, so a live session must load
-site modules from source; one-shot commands like @tt{raco camp build} leave bytecode alone and
-use it as usual.}
+enabled), @racket[load-site] also marks the site's directory as the boundary of a private
+bytecode cache (a @filepath{camp-live} subfolder of each @filepath{compiled} folder). Bytecode
+produced by @tt{raco setup} prevents modules from being reloaded after edits, so live sessions
+instead compile site modules into this cache without that restriction, and reuse it across
+sessions: unchanged modules never recompile. Bytecode produced by @tt{raco setup} or @tt{raco
+make} is neither loaded nor disturbed, so one-shot commands like @tt{raco camp build} keep
+their own compile cache.}
 
 @defproc[(resolve-site-spec [spec (or/c path? string? symbol?)]) (or/c path? #f)]{
 Resolves a site specification to a path. The @racket[_spec] can be:

@@ -108,17 +108,14 @@
                                                (string->path mod-path))))]
       [else
        (resolve-module-path mod-path #f)]))
+  (define site-root (simplify-path (build-path resolved 'up)))
+  (when (live-reload?)
+    (live-cache-root! site-root))
   (rerequire! resolved)
   (define site-config (dynamic-require resolved 'toml))
-  (define site-root (simplify-path (build-path resolved 'up)))
   (define get-info (get-info/full site-root))
   (define collection-name (and get-info (get-info 'collection (λ () #f))))
-  (define site (hash-set* site-config 'root site-root 'racket-collection collection-name))
-  (when (live-reload?)
-    (clear-site-bytecode! site-root
-                          (list (build-path site-root (site-output-folder site))
-                                (build-path site-root (site-static-folder site)))))
-  site)
+  (hash-set* site-config 'root site-root 'racket-collection collection-name))
 
 ;; ---------------------------------------------------------------------------
 ;; Collection Retrieval
