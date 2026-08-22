@@ -27,11 +27,12 @@ in user scope, the GUI app will be copied to your user’s @filepath{Application
 
 @section{User interface}
 
-@bold{Page management:} You can double click on individual sources in the right-side pane to edit
-them. (You can select your preferred editor by clicking @onscreen{File} menu →
-@onscreen{Preferences…}.) You can also right-click a source file to get a context menu with
-@onscreen{Edit}, @onscreen{Preview} and @onscreen{Delete} options. Previewing will start the project
-server (if it is not already started) and open your browser to the localhost URL for that page.
+@bold{Page management:} You can double click on individual sources in the right-side pane to open
+them in the @seclink["builtin-editor"]{built-in editor}. (To use an external editor instead, select
+one by clicking @onscreen{File} menu → @onscreen{Preferences…}.) You can also right-click a source
+file to get a context menu with @onscreen{Edit}, @onscreen{Preview} and @onscreen{Delete} options.
+Previewing will start the project server (if it is not already started) and open your browser to the
+localhost URL for that page.
 
 The toolbar buttons are pretty straightforward:
 
@@ -60,6 +61,45 @@ The toolbar buttons are pretty straightforward:
  @item{@onscreen{Publish}: Same effect as running @secref["cli-deploy"].}
  
  ]
+
+@subsection[#:tag "builtin-editor"]{The built-in editor}
+
+Double-clicking a source (or creating a new page) opens it in a simple editor window, one window per
+file. The editor provides:
+
+@itemlist[
+
+ @item{Syntax highlighting for every kind of file in a Camp site — Punct pages, @racketmodname[camp/site]
+ and @racketmodname[camp/book] configs, and plain Racket modules — chosen automatically from each
+ file's @hash-lang[] line.}
+
+ @item{Saving (@kbd{⌘}@kbd{S}) immediately rebuilds the site — or, while the preview server is
+ running, lets its file watcher do so.}
+
+ @item{Autocomplete: press @kbd{ctrl}@kbd{.} to complete identifiers defined in or imported by the
+ file. Completions are recomputed in the background as you edit; if the file doesn't currently
+ expand, the editor falls back to words already present in the buffer.}
+
+ @item{A find field (@kbd{⌘}@kbd{F} focuses it): typing highlights all matches, @kbd{return} jumps
+ to the next one, and @kbd{esc} returns to the text.}
+
+ @item{Hard-wrapping: @kbd{⌘}@kbd{J} re-wraps the paragraph around the cursor to the wrap column
+ set in @onscreen{Preferences…} (like Vim's @tt{gqip}), and it is Markdown-aware: a bulleted or
+ numbered list item is wrapped by itself, keeping its marker and giving continuation lines a
+ hanging indent; blockquoted text keeps its @tt{>} prefix on every line; and headings, code
+ fences and their contents, tables, and the metadata block are left alone.}
+
+ @item{Line numbers (toggle them in @onscreen{Preferences…}), parenthesis matching, and
+ language-aware indentation.}
+
+ @item{Optional Vim keybindings, toggled in @onscreen{Preferences…}. These are provided by the
+ @tt{drracket-vim-tool} package, which camp-app installs as a dependency (as a side effect, a
+ @onscreen{Vim Mode} also becomes available in DrRacket).}
+
+]
+
+If the file is changed on disk by another program while open in the editor, the editor offers to
+reload it.
 
 @subsection{Site Management}
 

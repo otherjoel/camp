@@ -13,6 +13,9 @@
 (provide @sites
          @site-selection
          @editor
+         @vim-mode
+         @fill-column
+         @line-numbers?
          update-pref!
          remove-from-pref!
          add-to-pref!
@@ -91,3 +94,9 @@
                 [(list* first _) first])))
 
 (define @editor (make-@pref 'editor ""))
+
+(define @vim-mode (make-@pref 'vim-mode #f))
+
+(define @fill-column (make-@pref 'fill-column 80))
+
+(define @line-numbers? (make-@pref 'line-numbers #t))

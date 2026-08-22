@@ -4,6 +4,7 @@
                "punct-lib"
                "base"
                "camp-lib"
+               "drracket-vim-tool"
                "gregor-lib"
                "gui-easy-lib"
                "gui-lib"))

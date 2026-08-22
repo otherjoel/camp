@@ -25,6 +25,8 @@
          setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
+         camp/app/private/editor
+         (only-in camp/app/private/editor-utils use-internal-editor?)
          camp/app/private/site-utils
          camp/app/private/subprocess-env)
 
@@ -274,7 +276,19 @@
 ;; ============================================================================
 ;; Components: Source documents table
 
+;; A save in the built-in editor rebuilds directly, except while the preview
+;; server runs — its file watcher already rebuilds, so only refresh the tables
+(define (handle-editor-save! _p)
+  (if (obs-peek @stop-server-proc)
+      (obs-update! @refresh-counter add1)
+      (trigger-refresh!)))
+
 (define (edit-source p)
+  (if (use-internal-editor? (obs-peek @editor))
+      (open-editor! p #:on-save handle-editor-save!)
+      (edit-source/external p)))
+
+(define (edit-source/external p)
   (thread
    (λ ()
      (define editor-path (obs-peek @editor))
@@ -770,7 +784,7 @@
 
 (define (editor-display-name path)
   (cond
-    [(or (not path) (and (string? path) (string=? path ""))) "System default"]
+    [(or (not path) (and (string? path) (string=? path ""))) "Built-in editor"]
     [(path? path) (path->string (file-name-from-path path))]
     [else (let ([p (string->path path)]) (path->string (file-name-from-path p)))]))
 
@@ -790,9 +804,25 @@
    #:mixin closing-mixin
    (vpanel
     (hpanel
+     (text "Editor:")
      (text @editor-label)
-     (button "Choose editor…" (λ () (choose-editor!)))
-     (button "Clear" (λ () (@editor . := . ""))))
+     (button "Choose external…" (λ () (choose-editor!)))
+     (button "Use built-in" (λ () (@editor . := . ""))))
+    (checkbox (λ (on?) (@vim-mode . := . (and on? #t)))
+              #:label "Vim keybindings in built-in editor"
+              #:checked? @vim-mode)
+    (checkbox (λ (on?) (@line-numbers? . := . (and on? #t)))
+              #:label "Line numbers in built-in editor"
+              #:checked? @line-numbers?)
+    (hpanel
+     (text "Wrap column (⌘J):")
+     (input (obs-map @fill-column number->string)
+            (λ (_action s)
+              (define n (string->number s))
+              (when (exact-positive-integer? n)
+                (@fill-column . := . n)))
+            #:min-size '(64 #f)
+            #:stretch '(#f #f)))
     (button "Close" close!))))
 
 (define (current-date)
@@ -837,6 +867,8 @@
 
 (define (run-app)
   (application-about-handler (λ () (render (?about))))
+  ;; framework installed its own (empty) preferences dialog on this handler
+  (application-preferences-handler (λ () (render (?prefs))))
   (when (obs-peek @site)
     (build-site-async!))
   (render §app))
