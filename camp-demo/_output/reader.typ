@@ -10,9 +10,7 @@
   copyright-notice: "Public Domain",
   copyright-legal: "These writings may be freely reproduced.",
 )
-= Essays and Lessons
-
-== Some Reconsiderations <reconsiderations>
+= Some Reconsiderations <reconsiderations>
 
 I have been thinking lately about certainty. About how quickly we dismiss
 that which we do not understand.
@@ -34,7 +32,7 @@ I find myself reconsidering many things lately.
 
 
 
-== Beginning Piano - Lesson Two <piano-lesson-two>
+= Beginning Piano - Lesson Two <piano-lesson-two>
 
 Welcome back to our piano studies. I trust you have been practicing your
 scales as instructed in #link(<piano-lesson-one>)[our previous lesson].
@@ -71,7 +69,7 @@ Though I confess, I have grown somewhat less certain of that lately.
 
 
 
-== On the So-Called "Think System" <think-system>
+= On the So-Called "Think System" <think-system>
 
 I have recently been made aware of a new method of musical instruction being
 promoted in our fair town. This #term_definition[Think System], as its proponent calls
@@ -90,7 +88,7 @@ be said for that.
 
 
 
-== New Acquisitions for July <new-books-july>
+= New Acquisitions for July <new-books-july>
 
 The River City Library is pleased to announce the following new additions to
 our collection:
@@ -111,7 +109,7 @@ where books are stored, typically organized by call number—starting Monday.
 
 
 
-== Beginning Piano - Lesson One <piano-lesson-one>
+= Beginning Piano - Lesson One <piano-lesson-one>
 
 For those beginning their journey with the
 #term_definition[pianoforte]—the full name of the piano, from Italian meaning

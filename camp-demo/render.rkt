@@ -146,7 +146,7 @@ TYPST
   (define name (hash-ref part 'name))
   (define chapters (hash-ref part 'chapters))
   (string-append
-   (format "= ~a\n\n" (escape-typst name))
+   ;(format "= ~a\n\n" (escape-typst name))
    (string-append*
     (for/list ([ch (in-list chapters)])
       (render-book-chapter ch)))))
@@ -156,7 +156,7 @@ TYPST
   (define doc (hash-ref ch 'doc))
   (define title (or (meta-ref doc 'title) slug))
   (string-append
-   (format "== ~a <~a>\n\n" (escape-typst title) slug)
+   (format "= ~a <~a>\n\n" (escape-typst title) slug)
    (camp-doc->typst doc)
    "\n\n"))
 
