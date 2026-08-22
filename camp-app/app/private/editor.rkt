@@ -230,6 +230,25 @@
       (send dc set-text-mode saved-mode)
       (send dc set-font saved-font))))
 
+;; The vim tool's block cursor is an opaque slategray highlight that buries
+;; the glyph beneath it; its color is a private constant upstream, so
+;; intercept the highlight call and substitute a translucent wash
+(define vim-cursor-color (make-object color% 112 128 144 0.4))
+
+(define (vim-cursor-mixin %)
+  (class %
+    (super-new)
+    (define/override (highlight-range start end color
+                                      [caret-space? #f] [priority 'low] [style 'rectangle]
+                                      #:adjust-on-insert/delete? [adjust? #f]
+                                      #:key [key #f])
+      (super highlight-range start end
+             (if (and (eq? key 'drracket-vim-highlight) (equal? color "slategray"))
+                 vim-cursor-color
+                 color)
+             caret-space? priority style
+             #:adjust-on-insert/delete? adjust? #:key key))))
+
 ;; Vim's command mode matches raw key codes, so ⌘-shortcuts would otherwise be
 ;; parsed as vim commands (⌘S as `s`); give them to the camp keymap first
 (define (command-keys-mixin %)
@@ -242,11 +261,12 @@
 
 (define camp-editor-text%
   (command-keys-mixin
-   (vim-emulation-mixin
-    (text:searching-mixin
-     (camp-line-numbers-mixin
-      (editor:autoload-mixin
-       (camp-editor-mixin racket:text%)))))))
+   (vim-cursor-mixin
+    (vim-emulation-mixin
+     (text:searching-mixin
+      (camp-line-numbers-mixin
+       (editor:autoload-mixin
+        (camp-editor-mixin racket:text%))))))))
 
 ;; ============================================================================
 ;; Editor windows
