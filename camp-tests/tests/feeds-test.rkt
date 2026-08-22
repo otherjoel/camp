@@ -164,6 +164,34 @@
              "Blog feed should NOT contain pages")
 
 ;; ---------------------------------------------------------------------------
+;; Multi-collection feeds: entry IDs derive from each entry's own collection
+
+(define (entry-ids xml)
+  ;; all <id> contents except the first, which is the feed's own <id>
+  (cdr (regexp-match* #px"<id>([^<]+)</id>" xml #:match-select cadr)))
+
+(define multi-feed-config
+  (hasheq 'filename "everything.atom"
+          'collections '("blog" "pages")
+          'render-with '(camp/tests/fixtures/render feed-content)))
+
+(define multi-xml
+  (parameterize ([current-site-info test-info])
+    (generate-feed test-site test-info multi-feed-config test-contexts-by-slug)))
+
+(check-equal? (filter (λ (id) (regexp-match? #px":blog\\." id)) (entry-ids multi-xml))
+              (entry-ids feed-xml)
+              "Entries keep the same IDs when their collection joins a multi-collection feed")
+
+(check-true (for/or ([id (in-list (entry-ids multi-xml))])
+              (regexp-match? #px":pages\\." id))
+            "Entries from the second collection get IDs under their own collection")
+
+(check-false (for/or ([id (in-list (entry-ids multi-xml))])
+               (string-contains? id "blog,pages"))
+             "No entry ID should use the feed's joined collection names")
+
+;; ---------------------------------------------------------------------------
 ;; RSS feed extension test
 
 ;; Create an RSS feed config (using .rss extension)

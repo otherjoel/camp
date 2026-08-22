@@ -120,16 +120,14 @@
   (define feed-tag-uri (make-feed-tag-uri the-site-url founded coll-names))
   (define author (parse-author (car authors)))
 
-  (define all-page-links
+  ;; Each entry's tag URI derives from its own collection, so entry IDs stay
+  ;; stable when collections are added to or removed from a feed.
+  (define feed-items
     (append*
      (for/list ([coll-name (in-list coll-names)])
-       (get-collection coll-name))))
-
-  (define filtered-pages (filter-feed-pages all-page-links))
-
-  (define feed-items
-    (for/list ([pl (in-list filtered-pages)])
-      (page-link->feed-item pl feed-tag-uri the-site-url author render-fn contexts-by-slug)))
+       (define coll-tag-uri (make-feed-tag-uri the-site-url founded (list coll-name)))
+       (for/list ([pl (in-list (filter-feed-pages (get-collection coll-name)))])
+         (page-link->feed-item pl coll-tag-uri the-site-url author render-fn contexts-by-slug)))))
 
   (define the-feed (feed feed-tag-uri the-site-url the-site-title feed-items))
   (define feed-url (url-join the-site-url filename))
