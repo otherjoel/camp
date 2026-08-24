@@ -74,7 +74,9 @@ file. The editor provides:
  file's @hash-lang[] line.}
 
  @item{Saving (@kbd{⌘}@kbd{S}) immediately rebuilds the site — or, while the preview server is
- running, lets its file watcher do so.}
+ running, lets its file watcher do so. The right end of the status bar reads @onscreen{Modified}
+ while the buffer has unsaved changes; each save replaces it with a Vim-style report of what was
+ written and when (e.g. @tt{Saved: 8L, 246B written • 14:22 Aug 22}).}
 
  @item{Autocomplete: press @kbd{ctrl}@kbd{.} to complete identifiers defined in or imported by the
  file. Completions are recomputed in the background as you edit; if the file doesn't currently

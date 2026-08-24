@@ -8,6 +8,7 @@
 (provide editor-title
          fill-paragraph
          fill-unit
+         saved-message
          use-internal-editor?)
 
 (define (editor-title path dirty?)
@@ -22,6 +23,12 @@
 
 (define (use-internal-editor? editor-pref)
   (not (non-empty-string? editor-pref)))
+
+;; Vim's post-write report ("8L, 246B written") plus a timestamp
+(define (saved-message text bytes stamp)
+  (format "Saved: ~aL, ~aB written • ~a"
+          (for/sum ([_ (in-lines (open-input-string text))]) 1)
+          bytes stamp))
 
 ;; ============================================================================
 ;; Markdown-aware paragraph filling

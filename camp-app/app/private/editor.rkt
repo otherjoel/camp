@@ -7,6 +7,7 @@
 ;; so no per-filetype configuration is needed here.
 
 (require framework
+         (only-in gregor now ~t)
          racket/class
          racket/gui
          racket/gui/easy
@@ -307,9 +308,19 @@
 (define (open-new-editor! key on-save)
   (define/obs @dirty? #f)
   (define/obs @status "")
+  (define/obs @saved "")
   (define/obs @find-text "")
   (define @title (obs-map @dirty? (λ (d) (editor-title key d))))
-  (define ed (new camp-editor-text% [@dirty? @dirty?] [on-save-cb on-save]))
+  (define @file-status
+    (obs-combine (λ (dirty? saved) (if dirty? "Modified" saved)) @dirty? @saved))
+  (define ed
+    (new camp-editor-text%
+         [@dirty? @dirty?]
+         [on-save-cb (λ (fn)
+                       (@saved . := . (saved-message (send ed get-text)
+                                                     (file-size fn)
+                                                     (~t (now) "HH:mm MMM d")))
+                       (on-save fn))]))
   (send ed load-file key 'text)
   (send ed refresh-completions)
   (send ed refresh-lang-info!)
@@ -388,6 +399,7 @@
           #:mixin editor-window-mixin
           (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(12 8))
           (hpanel #:stretch '(#t #f)
+                  #:spacing 12
                   (input @find-text
                          (λ (action s)
                            (@find-text . := . s)
@@ -410,7 +422,8 @@
                                           #t]
                                          [else (super on-subwindow-char rcv ev)])))))
                   (spacer)
-                  (text @status)))))
+                  (text @status)
+                  (text @file-status)))))
   (set-field! parent-frame ed (renderer-root r))
   (obs-observe! @vim-mode vim-sync)
   (obs-observe! @line-numbers? line-numbers-sync)

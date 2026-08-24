@@ -23,6 +23,16 @@
    (test-case "file at filesystem root has no folder suffix"
      (check-equal? (editor-title (string->path "/site.rkt") #f) "site.rkt"))
 
+   (test-case "saved-message follows vim's write report plus a timestamp"
+     (check-equal? (saved-message "one\ntwo\nthree\n" 246 "14:22 Aug 22")
+                   "Saved: 3L, 246B written • 14:22 Aug 22"))
+
+   (test-case "saved-message counts a final line without a trailing newline"
+     (check-equal? (saved-message "a\nb" 3 "09:05 Jan 1")
+                   "Saved: 2L, 3B written • 09:05 Jan 1")
+     (check-equal? (saved-message "" 0 "09:05 Jan 1")
+                   "Saved: 0L, 0B written • 09:05 Jan 1"))
+
    (test-case "internal editor used only when no external editor is set"
      (check-true (use-internal-editor? ""))
      (check-false (use-internal-editor? "/usr/bin/vim"))
