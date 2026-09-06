@@ -1,0 +1,8 @@
+{
+  "name": "Derived",
+  "include": "./base-theme.json",
+  "colors": {
+    "editor.background": "#111111",
+    "editor.foreground": "#EEEEEE"
+  }
+}

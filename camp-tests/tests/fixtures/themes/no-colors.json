@@ -1,0 +1,6 @@
+{
+  "name": "Empty",
+  "tokenColors": [
+    { "scope": "comment", "settings": { "foreground": "#888888" } }
+  ]
+}

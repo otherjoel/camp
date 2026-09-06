@@ -1,0 +1,55 @@
+{
+  // A dark VS Code theme exercising every JSONC tolerance camp supports:
+  /* block comments,
+     line comments, */
+  // and trailing commas in both objects and arrays.
+  "name": "Nightfall // JSONC edition",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#1E1E2E", // base surface
+    "editor.foreground": "#CDD6F4",
+    "editorCursor.foreground": "#F5E0DC",
+    "editor.selectionBackground": "#585B7080",
+    "editorBracketMatch.background": "#3E4152",
+    "editor.lineHighlightBackground": "#31324480",
+  },
+  "tokenColors": [
+    {
+      "name": "Comments",
+      "scope": "comment, punctuation.definition.comment",
+      "settings": { "foreground": "#6C7086", "fontStyle": "italic" }
+    },
+    {
+      "scope": ["string", "string.quoted"],
+      "settings": { "foreground": "#A6E3A1" }
+    },
+    {
+      "scope": ["constant.numeric", "constant.language"],
+      "settings": { "foreground": "#FAB387" }
+    },
+    {
+      "scope": "keyword",
+      "settings": { "foreground": "#CBA6F7", "fontStyle": "bold" }
+    },
+    {
+      "scope": "entity.name.function",
+      "settings": { "foreground": "#89B4FA" }
+    },
+    {
+      "scope": "variable",
+      "settings": { "foreground": "#F38BA8" }
+    },
+    {
+      "scope": "punctuation",
+      "settings": { "foreground": "#9399B2" }
+    },
+    {
+      "scope": "invalid",
+      "settings": { "foreground": "#F38BA8", "fontStyle": "underline" }
+    },
+    {
+      "scope": "meta.embedded",
+      "settings": {} /* no colors here on purpose */
+    },
+  ]
+}

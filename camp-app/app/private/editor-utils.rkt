@@ -3,11 +3,17 @@
 ;; Pure helpers for the in-app editor
 
 (require racket/list
+         racket/math
          racket/string)
 
 (provide editor-title
          fill-paragraph
          fill-unit
+         font-slot-label
+         gutter-font-size
+         markup-aware
+         next-font-slot
+         promote-markup
          saved-message
          use-internal-editor?)
 
@@ -24,11 +30,53 @@
 (define (use-internal-editor? editor-pref)
   (not (non-empty-string? editor-pref)))
 
+;; ============================================================================
+;; Markup coloring
+;;
+;; Punct's lexer tags Markdown structure with a 'markup attribute beside a
+;; standard 'type. Framework's colorer looks styles up by 'color when present,
+;; so promoting 'markup x to 'color markup-x routes those tokens to the
+;; markup-* scheme entries (appearance.rkt) while 'type keeps its meaning for
+;; spell-checking and navigation.
+
+(define (promote-markup attribs)
+  (define m (and (hash? attribs) (hash-ref attribs 'markup #f)))
+  (if m
+      (hash-set attribs 'color (string->symbol (format "markup-~a" m)))
+      attribs))
+
+(define (markup-aware get-token)
+  (λ (in offset mode)
+    (define-values (lexeme attribs paren start end backup new-mode)
+      (get-token in offset mode))
+    (values lexeme (promote-markup attribs) paren start end backup new-mode)))
+
 ;; Vim's post-write report ("8L, 246B written") plus a timestamp
 (define (saved-message text bytes stamp)
   (format "Saved: ~aL, ~aB written • ~a"
           (for/sum ([_ (in-lines (open-input-string text))]) 1)
           bytes stamp))
+
+;; ============================================================================
+;; Font slots
+;;
+;; A slot is (face size); #f in either position means the framework default,
+;; resolved at apply time in camp/app/private/fonts.
+
+(define (next-font-slot i)
+  (modulo (add1 i) 3))
+
+(define (gutter-font-size size)
+  (max 7 (exact-round (* 0.7 size))))
+
+(define (font-slot-label idx slot)
+  (define face (first slot))
+  (define size (second slot))
+  (format "Slot ~a: ~a" (add1 idx)
+          (cond
+            [(and (not face) (not size)) "(default)"]
+            [size (format "~a ~a" (or face "(default)") size)]
+            [else face])))
 
 ;; ============================================================================
 ;; Markdown-aware paragraph filling

@@ -16,6 +16,12 @@
          @vim-mode
          @fill-column
          @line-numbers?
+         @font-slots
+         @font-slot
+         @color-schemes
+         @light-scheme
+         @dark-scheme
+         @appearance-mode
          update-pref!
          remove-from-pref!
          add-to-pref!
@@ -100,3 +106,21 @@
 (define @fill-column (make-@pref 'fill-column 80))
 
 (define @line-numbers? (make-@pref 'line-numbers #t))
+
+;; Editor fonts and appearance (design §6): three (face size) font slots
+;; where #f means the framework default, the active slot index, imported
+;; color-scheme datums (see camp/app/private/theme), the scheme selected per
+;; polarity (a scheme name, or the symbol naming the built-in scheme), and
+;; the appearance mode.
+
+(define @font-slots (make-@pref 'font-slots '((#f #f) (#f #f) (#f #f))))
+
+(define @font-slot (make-@pref 'font-slot 0))
+
+(define @color-schemes (make-@pref 'color-schemes '()))
+
+(define @light-scheme (make-@pref 'light-scheme 'classic))
+
+(define @dark-scheme (make-@pref 'dark-scheme 'white-on-black))
+
+(define @appearance-mode (make-@pref 'appearance-mode 'system))

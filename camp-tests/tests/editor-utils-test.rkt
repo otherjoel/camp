@@ -23,6 +23,21 @@
    (test-case "file at filesystem root has no folder suffix"
      (check-equal? (editor-title (string->path "/site.rkt") #f) "site.rkt"))
 
+   (test-case "a markup attribute becomes the colorer's color category"
+     (check-equal? (promote-markup (hasheq 'type 'text 'markup 'emphasis))
+                   (hasheq 'type 'text 'markup 'emphasis 'color 'markup-emphasis))
+     (define plain (hasheq 'type 'text 'comment? #t))
+     (check-eq? (promote-markup plain) plain)
+     (check-eq? (promote-markup 'symbol) 'symbol))
+
+   (test-case "markup-aware wraps a lexer and passes everything else through"
+     (define (fake in offset mode)
+       (values "x" (hasheq 'type 'keyword 'markup 'heading) '|(| 1 2 0 (list offset mode)))
+     (define-values (lexeme attribs paren start end backup mode)
+       ((markup-aware fake) (open-input-string "") 7 'm))
+     (check-equal? (hash-ref attribs 'color) 'markup-heading)
+     (check-equal? (list lexeme paren start end backup mode) '("x" |(| 1 2 0 (7 m))))
+
    (test-case "saved-message follows vim's write report plus a timestamp"
      (check-equal? (saved-message "one\ntwo\nthree\n" 246 "14:22 Aug 22")
                    "Saved: 3L, 246B written • 14:22 Aug 22"))

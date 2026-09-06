@@ -4,9 +4,11 @@
 ;;
 ;; racket:text% colors any #lang whose reader supplies a 'color-lexer (punct,
 ;; camp/site, camp/book, racket…) by dispatching off the buffer's #lang line,
-;; so no per-filetype configuration is needed here.
+;; so no per-filetype configuration is needed here; punct's Markdown structure
+;; arrives as a 'markup token attribute (see editor-utils).
 
-(require framework
+(require camp/app/private/framework-prefs ; must precede framework (see that module)
+         framework
          (only-in gregor now ~t)
          racket/class
          racket/gui
@@ -18,8 +20,10 @@
          ;; must be a static require: parent-frame is a local member name,
          ;; which set-field! needs at compile time
          (only-in drracket-vim-tool/private/text vim-emulation-mixin parent-frame)
+         (only-in camp/app/private/appearance @canvas-bg @vim-selection-color)
          camp/app/private/complete
          camp/app/private/editor-utils
+         camp/app/private/fonts
          camp/app/private/gui
          (only-in camp/app/private/settings @vim-mode @fill-column @line-numbers?))
 
@@ -38,11 +42,14 @@
           (λ (ed _evt) (send (send ed get-top-level-window) focus-find-field!)))
     (send km add-function "camp:fill-paragraph"
           (λ (ed _evt) (send ed fill-paragraph!)))
+    (send km add-function "camp:cycle-font"
+          (λ (_ed _evt) (cycle-font-slot!)))
     (send km map-function "d:s" "camp:save")
     (send km map-function "c:s" "camp:save")
     (send km map-function "d:w" "camp:close-window")
     (send km map-function "d:f" "camp:find")
     (send km map-function "d:j" "camp:fill-paragraph")
+    (send km map-function "d:s:f" "camp:cycle-font")
     km))
 
 (define completion-idle-ms 2000)
@@ -50,8 +57,15 @@
 (define (camp-editor-mixin %)
   (class %
     (init-field @dirty? on-save-cb)
-    (inherit get-filename get-text compute-racket-amount-to-indent)
+    (inherit get-filename get-text compute-racket-amount-to-indent
+             set-max-undo-history)
     (super-new)
+    ;; text% records no undo history by default
+    (set-max-undo-history 'forever)
+
+    ;; Route punct's 'markup tokens to the markup-* color entries
+    (define/override (start-colorer token-sym->style get-token pairs)
+      (super start-colorer token-sym->style (markup-aware get-token) pairs))
 
     (define/public (refresh-completions)
       (define fn (get-filename))
@@ -124,8 +138,6 @@
             (end-edit-sequence)])
          (set-position (+ start (string-length filled)))]))))
 
-(define line-number-font
-  (send the-font-list find-or-create-font 9 "Menlo" 'modern 'normal 'normal))
 (define line-number-gap 8)
 
 ;; A small gutter drawn in the text's left padding: smaller dimmed numbers in
@@ -156,7 +168,8 @@
         (cond
           [(and show? dc)
            (define widest (number->string (max 100 (add1 (last-line)))))
-           (define-values (w _h _b _s) (send dc get-text-extent widest line-number-font))
+           (define-values (w _h _b _s)
+             (send dc get-text-extent widest (obs-peek @gutter-font)))
            (+ w line-number-gap)]
           [else 0]))
       (unless (= new-left padding-left)
@@ -181,20 +194,23 @@
           (draw-gutter dc dx dy top bottom))))
 
     (define/private (draw-gutter dc dx dy top bottom)
+      (define num-font (obs-peek @gutter-font))
       (define saved-font (send dc get-font))
       (define saved-fg (send dc get-text-foreground))
       (define saved-alpha (send dc get-alpha))
       (define saved-mode (send dc get-text-mode))
-      (send dc set-font line-number-font)
+      (send dc set-font num-font)
       (send dc set-text-mode 'transparent)
+      ;; the default-color style, not "Standard", carries the scheme's text color
       (define sl (get-style-list))
-      (define std-style (or (send sl find-named-style "Standard") (send sl basic-style)))
+      (define std-style (or (send sl find-named-style (editor:get-default-color-style-name))
+                            (send sl basic-style)))
       (send dc set-text-foreground (send std-style get-foreground))
       ;; align number baselines with the text baseline
       (define-values (_sw std-h std-desc _se)
         (send dc get-text-extent "0" (send std-style get-font)))
       (define-values (_nw num-h num-desc _ne)
-        (send dc get-text-extent "0" line-number-font))
+        (send dc get-text-extent "0" num-font))
       (define y-offset (- (- std-h std-desc) (- num-h num-desc)))
       (define view-left
         (let ([l (box 0)] [t (box 0)] [w (box 0)] [h (box 0)])
@@ -231,24 +247,82 @@
       (send dc set-text-mode saved-mode)
       (send dc set-font saved-font))))
 
-;; The vim tool's block cursor is an opaque slategray highlight that buries
-;; the glyph beneath it; its color is a private constant upstream, so
-;; intercept the highlight call and substitute a translucent wash
-(define vim-cursor-color (make-object color% 112 128 144 0.4))
+;; The caret is one fixed light blue in both polarities: the insertion caret
+;; (vim insert mode, and always without vim) is a bar painted over text%'s
+;; hairline, which has no color or width of its own, and the vim block cursor
+;; is a translucent wash of it so the glyph beneath stays visible. The vim
+;; tool draws its block and its visual selection as highlights in private
+;; constant colors upstream ("slategray" / "lightsteelblue"), so the highlight
+;; call is intercepted to substitute the caret blue and the scheme's selection
+;; color.
+(define caret-color (make-color 31 190 255))
+(define caret-bar-width 2)
 
-(define (vim-cursor-mixin %)
+(define (translucent c)
+  (make-color (send c red) (send c green) (send c blue) 0.4))
+
+(define (cursor-mixin %)
   (class %
+    (inherit get-start-position get-end-position position-location
+             caret-hidden? invalidate-bitmap-cache)
     (super-new)
     (define/override (highlight-range start end color
                                       [caret-space? #f] [priority 'low] [style 'rectangle]
                                       #:adjust-on-insert/delete? [adjust? #f]
                                       #:key [key #f])
       (super highlight-range start end
-             (if (and (eq? key 'drracket-vim-highlight) (equal? color "slategray"))
-                 vim-cursor-color
-                 color)
+             (cond
+               [(not (eq? key 'drracket-vim-highlight)) color]
+               [(equal? color "slategray") (translucent caret-color)]
+               [(equal? color "lightsteelblue") (obs-peek @vim-selection-color)]
+               [else color])
              caret-space? priority style
-             #:adjust-on-insert/delete? adjust? #:key key))))
+             #:adjust-on-insert/delete? adjust? #:key key))
+
+    ;; The bar at pos as (x y w h), straddling the hairline's column
+    (define (caret-bar pos)
+      (define x (box 0))
+      (define top (box 0))
+      (define bottom (box 0))
+      (position-location pos x top #t)
+      (position-location pos #f bottom #f)
+      (values (- (unbox x) 0.5) (unbox top) caret-bar-width (- (unbox bottom) (unbox top))))
+
+    (define/override (on-paint before? dc left top right bottom dx dy draw-caret)
+      (super on-paint before? dc left top right bottom dx dy draw-caret)
+      (define pos (get-start-position))
+      (when (and (not before?)
+                 (eq? draw-caret 'show-caret)
+                 (not (caret-hidden?))
+                 (= pos (get-end-position)))
+        (define-values (x y w h) (caret-bar pos))
+        (when (and (<= x right) (<= left (+ x w)) (<= y bottom) (<= top (+ y h)))
+          (define pen (send dc get-pen))
+          (define brush (send dc get-brush))
+          (send dc set-pen "black" 0 'transparent)
+          (send dc set-brush caret-color 'solid)
+          (send dc draw-rectangle (+ x dx) (+ y dy) w h)
+          (send dc set-pen pen)
+          (send dc set-brush brush))))
+
+    ;; text% refreshes only its hairline when the caret moves; refresh the
+    ;; bar's full width where it was and where it is
+    (define last-pos #f)
+    (define (refresh-bar!)
+      (define pos (get-start-position))
+      (for ([p (in-list (if (and last-pos (not (= last-pos pos))) (list last-pos pos) (list pos)))])
+        (define-values (x y w h) (caret-bar p))
+        (invalidate-bitmap-cache (- x 1) y (+ w 2) h))
+      (set! last-pos pos))
+    (define/augment (after-set-position)
+      (inner (void) after-set-position)
+      (refresh-bar!))
+    (define/augment (after-insert start len)
+      (inner (void) after-insert start len)
+      (refresh-bar!))
+    (define/augment (after-delete start len)
+      (inner (void) after-delete start len)
+      (refresh-bar!))))
 
 ;; Vim's command mode matches raw key codes, so ⌘-shortcuts would otherwise be
 ;; parsed as vim commands (⌘S as `s`); give them to the camp keymap first
@@ -262,7 +336,7 @@
 
 (define camp-editor-text%
   (command-keys-mixin
-   (vim-cursor-mixin
+   (cursor-mixin
     (vim-emulation-mixin
      (text:searching-mixin
       (camp-line-numbers-mixin
@@ -359,6 +433,18 @@
                (@status . := . "")]))))
   (define (line-numbers-sync on?)
     (queue-callback (λ () (send ed show-line-numbers! on?))))
+  ;; a font-slot change resizes the gutter, so re-measure its padding
+  (define (gutter-font-sync _font)
+    (queue-callback (λ () (send ed show-line-numbers! (obs-peek @line-numbers?)))))
+  ;; gui-easy's editor-canvas doesn't use framework's canvas:color-mixin, so
+  ;; the scheme's background is applied here; the gutter paints from it
+  (define (canvas-bg-sync color)
+    (queue-callback
+     (λ ()
+       (define canvas (find-editor-canvas (renderer-root r)))
+       (when canvas
+         (send canvas set-canvas-background color)
+         (send canvas refresh)))))
 
   (define (editor-window-mixin %)
     (class %
@@ -388,15 +474,54 @@
         (hash-remove! open-editors key)
         (obs-unobserve! @vim-mode vim-sync)
         (obs-unobserve! @line-numbers? line-numbers-sync)
+        (obs-unobserve! @gutter-font gutter-font-sync)
+        (obs-unobserve! @canvas-bg canvas-bg-sync)
         (queue-callback (λ () (renderer-destroy r)) #f)
         (inner (void) on-close))))
 
+  ;; Frame menus: every editor command with a key combo is listed so the
+  ;; combos are discoverable. No shortcut may involve ⌥: macOS delivers
+  ;; option chords with a translated key-code ("ƒ" for ⌥F) and both keymaps
+  ;; and menu shortcuts (wxmenu.rkt dispatches them through a keymap%, not
+  ;; native NSMenu key equivalents) fail to match it.
+  ;; Generic edit operations target the focused control, not always ed.
+  (define (edit-op op)
+    (λ ()
+      (define target (send (renderer-root r) get-edit-target-object))
+      (when (and target (is-a? target editor<%>))
+        (send target do-edit-operation op))))
+  (define editor-menu-bar
+    (menu-bar
+     (menu "File"
+           (menu-item "Save" (λ () (send ed save-file #f 'text))
+                      #:shortcut '(cmd #\S))
+           (menu-item-separator)
+           (menu-item "Close" (λ () (send (renderer-root r) close-editor-window!))
+                      #:shortcut '(cmd #\W)))
+     (menu "Edit"
+           (menu-item "Undo" (edit-op 'undo) #:shortcut '(cmd #\Z))
+           (menu-item "Redo" (edit-op 'redo) #:shortcut '(cmd shift #\Z))
+           (menu-item-separator)
+           (menu-item "Cut" (edit-op 'cut) #:shortcut '(cmd #\X))
+           (menu-item "Copy" (edit-op 'copy) #:shortcut '(cmd #\C))
+           (menu-item "Paste" (edit-op 'paste) #:shortcut '(cmd #\V))
+           (menu-item "Select All" (edit-op 'select-all) #:shortcut '(cmd #\A))
+           (menu-item-separator)
+           (menu-item "Find" (λ () (send (renderer-root r) focus-find-field!))
+                      #:shortcut '(cmd #\F)))
+     (menu "Format"
+           (menu-item "Re-wrap Paragraph" (λ () (send ed fill-paragraph!))
+                      #:shortcut '(cmd #\J))
+           (menu-item-separator)
+           (menu-item "Cycle Editor Font" (λ () (cycle-font-slot!))
+                      #:shortcut '(cmd shift #\F)))))
   (set! r
         (render
          (window
           #:title @title
           #:size (list window-width 820)
           #:mixin editor-window-mixin
+          editor-menu-bar
           (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(12 8))
           (hpanel #:stretch '(#t #f)
                   #:spacing 12
@@ -425,8 +550,11 @@
                   (text @status)
                   (text @file-status)))))
   (set-field! parent-frame ed (renderer-root r))
+  (canvas-bg-sync (obs-peek @canvas-bg))
   (obs-observe! @vim-mode vim-sync)
   (obs-observe! @line-numbers? line-numbers-sync)
+  (obs-observe! @gutter-font gutter-font-sync)
+  (obs-observe! @canvas-bg canvas-bg-sync)
   (when (obs-peek @vim-mode) (send ed on-initialization))
   (hash-set! open-editors key r)
   (log-msg "Editing: ~a" (file-name-from-path key)))

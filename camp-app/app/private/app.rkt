@@ -16,6 +16,7 @@
          racket/gui/easy/operator
          racket/list
          racket/match
+         racket/math
          racket/path
          (only-in camp/private/rerequire rerequire! live-reload?)
          racket/runtime-path
@@ -25,8 +26,11 @@
          setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
+         (only-in camp/app/private/appearance init-appearance!)
          camp/app/private/editor
-         (only-in camp/app/private/editor-utils use-internal-editor?)
+         (only-in camp/app/private/editor-utils use-internal-editor? font-slot-label)
+         camp/app/private/fonts
+         (only-in camp/app/private/theme import-theme-file scheme-name scheme-dark?)
          camp/app/private/site-utils
          camp/app/private/subprocess-env)
 
@@ -697,7 +701,7 @@
       (define content
         (string-append
          (if pkg (string-append "#lang punct " pkg "\n") "#lang punct\n")
-         "---\n"
+         "\n---\n"
          (format "title: ~a\n" title)
          (format "date: ~a\n" date)
          (if (non-empty-string? slug) (format "slug: ~a\n" slug) "")
@@ -796,34 +800,165 @@
   (when path
     (@editor . := . (path->string path))))
 
+;; HIG two-column form: right-aligned label column, left-aligned controls
+(define (pref-row label #:top? [top? #f] . controls)
+  (hpanel
+   #:stretch '(#t #f)
+   #:spacing 10
+   (hpanel #:min-size '(130 #f)
+           #:stretch '(#f #f)
+           #:alignment (list 'right (if top? 'top 'center))
+           (text label))
+   (apply hpanel #:spacing 8 #:alignment '(left center) controls)))
+
+(define pref-caption-color (make-color 120 120 120))
+
+(define (pref-caption s)
+  (text s #:font small-control-font #:color pref-caption-color))
+
+(define (pref-group-gap)
+  (hpanel #:min-size '(#f 10) #:stretch '(#t #f)))
+
+(define (change-font-slot! idx)
+  (define f (get-font-from-user "Slot font" (get-main-frame) (slot-font idx)))
+  (when f
+    (define face (or (send f get-face)
+                     (get-family-builtin-face (send f get-family))))
+    (define size (exact-round (send f get-size)))
+    (@font-slots . <~ . (λ (slots) (list-set slots idx (list face size))))))
+
+(define (font-slot-controls idx)
+  (list
+   (hpanel #:min-size '(16 #f) #:stretch '(#f #f)
+           (text (obs-map @font-slot (λ (active) (if (= active idx) "●" "")))))
+   (hpanel #:min-size '(210 #f) #:stretch '(#f #f) #:alignment '(left center)
+           (text (obs-map @font-slots
+                          (λ (slots) (font-slot-label idx (list-ref slots idx))))))
+   (button "Change…" (λ () (change-font-slot! idx)))
+   (button "Activate" (λ () (@font-slot . := . idx)))))
+
+(define (scheme-display-name v)
+  (match v
+    ['classic "DrRacket classic"]
+    ['white-on-black "DrRacket white-on-black"]
+    [_ v]))
+
+(define (scheme-choices dark?)
+  (obs-map @color-schemes
+           (λ (schemes)
+             (cons (if dark? 'white-on-black 'classic)
+                   (for/list ([s (in-list schemes)]
+                              #:when (eq? dark? (scheme-dark? s)))
+                     (scheme-name s))))))
+
+(define (import-scheme!)
+  (define p (get-file "Import theme" (get-main-frame) #f #f #f null
+                      '(("Theme files" "*.tmTheme;*.json"))))
+  (when p
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (log-msg "Theme import failed: ~a" (exn-message e))
+                       (message-box "Import Failed" (exn-message e)
+                                    (get-main-frame) '(ok stop)))])
+      (define s (import-theme-file p))
+      (@color-schemes . <~ .
+       (λ (schemes)
+         (if (findf (λ (x) (equal? (scheme-name x) (scheme-name s))) schemes)
+             (for/list ([x (in-list schemes)])
+               (if (equal? (scheme-name x) (scheme-name s)) s x))
+             (append schemes (list s)))))
+      (log-msg "Imported ~a theme: ~a"
+               (if (scheme-dark? s) "dark" "light") (scheme-name s)))))
+
+(define (remove-scheme! s)
+  (when s
+    (when (equal? (obs-peek @light-scheme) (scheme-name s))
+      (@light-scheme . := . 'classic))
+    (when (equal? (obs-peek @dark-scheme) (scheme-name s))
+      (@dark-scheme . := . 'white-on-black))
+    (@color-schemes . <~ . (λ (schemes) (remove s schemes)))))
+
 (define (?prefs)
   (define-values (close! closing-mixin) (make-mix-close))
   (define @editor-label (obs-map @editor editor-display-name))
+  (define/obs @scheme-selection #f)
   (dialog
    #:title "Preferences"
+   #:min-size '(680 #f)
    #:mixin closing-mixin
    (vpanel
+    #:margin '(20 20)
+    #:spacing 6
+    #:alignment '(left top)
+    (pref-row "Editor:"
+              (text @editor-label)
+              (button "Choose External…" (λ () (choose-editor!)))
+              (button "Use Built-in" (λ () (@editor . := . ""))))
+    (pref-row "Options:"
+              (checkbox (λ (on?) (@vim-mode . := . (and on? #t)))
+                        #:label "Vim keybindings"
+                        #:checked? @vim-mode))
+    (pref-row ""
+              (checkbox (λ (on?) (@line-numbers? . := . (and on? #t)))
+                        #:label "Show line numbers"
+                        #:checked? @line-numbers?))
+    (pref-row "Wrap column:"
+              (input (obs-map @fill-column number->string)
+                     (λ (_action s)
+                       (define n (string->number s))
+                       (when (exact-positive-integer? n)
+                         (@fill-column . := . n)))
+                     #:min-size '(64 #f)
+                     #:stretch '(#f #f))
+              (pref-caption "⌘J re-wraps the current paragraph"))
+    (pref-group-gap)
+    (apply pref-row "Editor font:" (font-slot-controls 0))
+    (apply pref-row "" (font-slot-controls 1))
+    (apply pref-row "" (font-slot-controls 2))
+    (pref-row "" (pref-caption "⇧⌘F switches to the next font slot"))
+    (pref-group-gap)
+    (pref-row "Appearance:"
+              (choice '(light dark system)
+                      (λ (m) (when m (@appearance-mode . := . m)))
+                      #:selection @appearance-mode
+                      #:choice->label (λ (m) (case m
+                                               [(light) "Light"]
+                                               [(dark) "Dark"]
+                                               [else "Follow system"]))
+                      #:min-size '(200 #f)))
+    (pref-row "Light scheme:"
+              (choice (scheme-choices #f)
+                      (λ (v) (when v (@light-scheme . := . v)))
+                      #:selection @light-scheme
+                      #:choice->label scheme-display-name
+                      #:min-size '(280 #f)))
+    (pref-row "Dark scheme:"
+              (choice (scheme-choices #t)
+                      (λ (v) (when v (@dark-scheme . := . v)))
+                      #:selection @dark-scheme
+                      #:choice->label scheme-display-name
+                      #:min-size '(280 #f)))
+    (pref-row "Themes:" #:top? #t
+              (vpanel
+               #:spacing 8
+               #:alignment '(left top)
+               (table '("Installed themes" "Mode")
+                      (obs-map @color-schemes list->vector)
+                      (λ (_evt entries idx)
+                        (@scheme-selection . := . (and idx (vector-ref entries idx))))
+                      #:entry->row (λ (s) (vector (scheme-name s)
+                                                  (if (scheme-dark? s) "dark" "light")))
+                      #:min-size '(#f 140))
+               (hpanel
+                #:spacing 8
+                #:stretch '(#t #f)
+                (button "Import Theme…" (λ () (import-scheme!)))
+                (button "Remove" (λ () (remove-scheme! (obs-peek @scheme-selection)))))))
+    (pref-group-gap)
     (hpanel
-     (text "Editor:")
-     (text @editor-label)
-     (button "Choose external…" (λ () (choose-editor!)))
-     (button "Use built-in" (λ () (@editor . := . ""))))
-    (checkbox (λ (on?) (@vim-mode . := . (and on? #t)))
-              #:label "Vim keybindings in built-in editor"
-              #:checked? @vim-mode)
-    (checkbox (λ (on?) (@line-numbers? . := . (and on? #t)))
-              #:label "Line numbers in built-in editor"
-              #:checked? @line-numbers?)
-    (hpanel
-     (text "Wrap column (⌘J):")
-     (input (obs-map @fill-column number->string)
-            (λ (_action s)
-              (define n (string->number s))
-              (when (exact-positive-integer? n)
-                (@fill-column . := . n)))
-            #:min-size '(64 #f)
-            #:stretch '(#f #f)))
-    (button "Close" close!))))
+     #:stretch '(#t #f)
+     #:alignment '(right center)
+     (button "Close" close! #:style '(border))))))
 
 (define (current-date)
   (seconds->date (current-seconds)))
@@ -869,6 +1004,8 @@
   (application-about-handler (λ () (render (?about))))
   ;; framework installed its own (empty) preferences dialog on this handler
   (application-preferences-handler (λ () (render (?prefs))))
+  (init-appearance!)
+  (apply-active-font-slot!)
   (when (obs-peek @site)
     (build-site-async!))
   (render §app))
