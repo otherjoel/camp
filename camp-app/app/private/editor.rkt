@@ -420,9 +420,9 @@
   (define/obs @status "")
   (define/obs @saved "")
   (define/obs @find-text "")
+  (define/obs @find-visible? #f)
   (define @title (obs-map @dirty? (λ (d) (editor-title key d))))
-  (define @file-status
-    (obs-combine (λ (dirty? saved) (if dirty? "Modified" saved)) @dirty? @saved))
+  (define @modified (obs-map @dirty? (λ (d) (if d "Modified" ""))))
   (define ed
     (new camp-editor-text%
          [@dirty? @dirty?]
@@ -487,7 +487,9 @@
     (class %
       (super-new)
       (define/public (vim?) (obs-peek @vim-mode))
-      (define/public (set-vim-status-message s) (@status . := . s))
+      ;; the vim tool's "-- INSERT --" style, without the dashes
+      (define/public (set-vim-status-message s)
+        (@status . := . (regexp-replace* #px"^-- | --$" s "")))
       ;; Stubs for the vim tool's tab/window ex-commands
       (define/public (next-tab) (void))
       (define/public (prev-tab) (void))
@@ -497,8 +499,16 @@
       (define/public (move-current-tab-left) (void))
       (define/public (get-definitions-canvas) (find-editor-canvas this))
       (define/public (get-interactions-canvas) (find-editor-canvas this))
+      ;; gui-easy shows the field a turn or two after the observable flips
       (define/public (focus-find-field!)
-        (cond [(unbox find-field) => (λ (f) (send f focus))]))
+        (@find-visible? . := . #t)
+        (let retry ([turns 10])
+          (queue-callback
+           (λ ()
+             (define f (unbox find-field))
+             (cond [(and f (send f is-shown?)) (send f focus)]
+                   [(positive? turns) (retry (sub1 turns))]))
+           #f)))
       (define/public (close-editor-window!)
         (when (send this can-close?)
           (send this on-close)
@@ -544,11 +554,16 @@
            (menu-item "Paste" (edit-op 'paste) #:shortcut '(cmd #\V))
            (menu-item "Select All" (edit-op 'select-all) #:shortcut '(cmd #\A))
            (menu-item-separator)
-           (menu-item "Find" (λ () (send (renderer-root r) focus-find-field!))
-                      #:shortcut '(cmd #\F)))
-     (menu "Format"
            (menu-item "Re-wrap Paragraph" (λ () (send ed fill-paragraph!))
                       #:shortcut '(cmd #\J))
+           (menu-item-separator)
+           (menu-item "Find" (λ () (send (renderer-root r) focus-find-field!))
+                      #:shortcut '(cmd #\F)))
+     (menu "View"
+           (checkable-menu-item "Line Numbers"
+                                (λ (on?) (@line-numbers? . := . (and on? #t)))
+                                #:checked? @line-numbers?
+                                #:shortcut '(cmd shift #\L))
            (menu-item-separator)
            (menu-item "Cycle Editor Font" (λ () (cycle-font-slot!))
                       #:shortcut '(cmd shift #\F)))))
@@ -560,32 +575,37 @@
           #:mixin editor-window-mixin
           editor-menu-bar
           (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(0 8))
+          ;; Status bar: the Modified badge's slot, then the find field or the
+          ;; last save report, then the vim mode badge at the right end
           (hpanel #:stretch '(#t #f)
                   #:spacing 12
-                  (input @find-text
-                         (λ (action s)
-                           (@find-text . := . s)
-                           (case action
-                             [(input) (update-search! s)]
-                             [(return) (find-next!)]))
-                         #:label "Find:"
-                         #:stretch '(#f #f)
-                         #:min-size '(240 #f)
-                         #:mixin (λ (%)
-                                   (class %
-                                     (super-new)
-                                     (set-box! find-field this)
-                                     (define/override (on-subwindow-char rcv ev)
-                                       (cond
-                                         [(eq? (send ev get-key-code) 'escape)
-                                          (@find-text . := . "")
-                                          (update-search! "")
-                                          (focus-editor!)
-                                          #t]
-                                         [else (super on-subwindow-char rcv ev)])))))
-                  (spacer)
-                  (text @status)
-                  (text @file-status)))))
+                  #:margin '(12 4)
+                  (badge @modified "Modified")
+                  (if-view @find-visible?
+                           (input @find-text
+                                  (λ (action s)
+                                    (@find-text . := . s)
+                                    (case action
+                                      [(input) (update-search! s)]
+                                      [(return) (find-next!)]))
+                                  #:label "Find:"
+                                  #:stretch '(#f #f)
+                                  #:min-size '(240 #f)
+                                  #:mixin (λ (%)
+                                            (class %
+                                              (super-new)
+                                              (set-box! find-field this)
+                                              (define/override (on-subwindow-char rcv ev)
+                                                (cond
+                                                  [(eq? (send ev get-key-code) 'escape)
+                                                   (@find-text . := . "")
+                                                   (update-search! "")
+                                                   (@find-visible? . := . #f)
+                                                   (focus-editor!)
+                                                   #t]
+                                                  [else (super on-subwindow-char rcv ev)])))))
+                           (text @saved))
+                  (badge @status "VISUAL-LINE" #:align 'right #:stretch? #t)))))
   (set-field! parent-frame ed (renderer-root r))
   (canvas-bg-sync (obs-peek @canvas-bg))
   (obs-observe! @vim-mode vim-sync)

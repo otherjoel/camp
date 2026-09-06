@@ -14,7 +14,9 @@
 
 (use-color? #t)
 
-(provide dragdrop-mix
+(provide badge
+         draw-badge
+         dragdrop-mix
          make-mix-close
          ?dialog
          set-main-frame!
@@ -25,6 +27,47 @@
          log-output-textbox%)
 
 (define mono-font (make-object font% 12 "Menlo" 'modern))
+
+;; ============================================================================
+;; Badges
+;;
+;; A monospace label on a rounded tint, for status bars. A badge view's slot
+;; is sized for the widest label it will show, so the layout never shifts
+;; as the label changes or clears; a right-aligned badge may also stretch
+;; to take the remaining width.
+
+(define badge-pad 6)
+
+(define (badge-size label)
+  (define dc (new bitmap-dc% [bitmap (make-bitmap 1 1)]))
+  (define-values (w h _d _e) (send dc get-text-extent label mono-font))
+  (values (inexact->exact (ceiling (+ w (* 2 badge-pad))))
+          (inexact->exact (ceiling (+ h 4)))))
+
+(define (draw-badge dc label align)
+  (unless (string=? label "")
+    (define-values (cw ch) (send dc get-size))
+    (define-values (tw th _d _e) (send dc get-text-extent label mono-font))
+    (define bw (+ tw (* 2 badge-pad)))
+    (define bh (+ th 4))
+    (define x (if (eq? align 'right) (- cw bw) 0))
+    (define y (/ (- ch bh) 2))
+    (define fg (get-label-foreground-color))
+    (send dc set-smoothing 'smoothed)
+    (send dc set-pen fg 1 'transparent)
+    (send dc set-brush (make-color (send fg red) (send fg green) (send fg blue) 0.12) 'solid)
+    (send dc draw-rounded-rectangle x y bw bh 4)
+    (send dc set-font mono-font)
+    (send dc set-text-foreground fg)
+    (send dc draw-text label (+ x badge-pad) (+ y 2))))
+
+(define (badge @label widest #:align [align 'left] #:stretch? [stretch? #f])
+  (define-values (w h) (badge-size widest))
+  (canvas @label
+          #:style '(transparent)
+          #:min-size (list w h)
+          #:stretch (list stretch? #f)
+          (λ (dc label) (draw-badge dc label align))))
 
 ;; ============================================================================
 ;; Logging helper

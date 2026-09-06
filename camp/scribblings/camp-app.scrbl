@@ -71,7 +71,9 @@ file. The editor provides:
 
  @item{Syntax highlighting for every kind of file in a Camp site — Punct pages, @racketmodname[camp/site]
  and @racketmodname[camp/book] configs, and plain Racket modules — chosen automatically from each
- file's @hash-lang[] line.}
+ file's @hash-lang[] line. Punct pages are highlighted as Markdown: headings, emphasis, code spans
+ and fenced blocks, links, list and quote markers, and the metadata block each get their own color,
+ while ordinary prose stays in the plain text color.}
 
  @item{Saving (@kbd{⌘}@kbd{S}) immediately rebuilds the site — or, while the preview server is
  running, lets its file watcher do so. The right end of the status bar reads @onscreen{Modified}
@@ -82,19 +84,25 @@ file. The editor provides:
  file. Completions are recomputed in the background as you edit; if the file doesn't currently
  expand, the editor falls back to words already present in the buffer.}
 
- @item{A find field (@kbd{⌘}@kbd{F} focuses it): typing highlights all matches, @kbd{return} jumps
- to the next one, and @kbd{esc} returns to the text.}
+ @item{Find (@kbd{⌘}@kbd{F}, or @onscreen{Edit ▸ Find}) reveals a field in the status bar: typing
+ highlights all matches, @kbd{return} jumps to the next one, and @kbd{esc} hides the field and
+ returns to the text.}
 
- @item{Hard-wrapping: @kbd{⌘}@kbd{J} re-wraps the paragraph around the cursor to the wrap column
+ @item{Hard-wrapping: @kbd{⌘}@kbd{J} (@onscreen{Edit ▸ Re-wrap Paragraph}) re-wraps the paragraph around the cursor to the wrap column
  set in @onscreen{Preferences…} (like Vim's @tt{gqip}), and it is Markdown-aware: a bulleted or
  numbered list item is wrapped by itself, keeping its marker and giving continuation lines a
  hanging indent; blockquoted text keeps its @tt{>} prefix on every line; and headings, code
  fences and their contents, tables, and the metadata block are left alone.}
 
- @item{Line numbers (toggle them in @onscreen{Preferences…}), parenthesis matching, and
- language-aware indentation.}
+ @item{A centered text block, as in iA Writer: the margins grow as the window widens, and never
+ shrink below a comfortable minimum.}
 
- @item{Optional Vim keybindings, toggled in @onscreen{Preferences…}. These are provided by the
+ @item{Line numbers (toggle them with @onscreen{View ▸ Line Numbers}, @kbd{⌘}@kbd{⇧}@kbd{L}, or in
+ @onscreen{Preferences…}; they sit in the left margin, so the text stays put either way),
+ parenthesis matching, and language-aware indentation.}
+
+ @item{Optional Vim keybindings, toggled in @onscreen{Preferences…}; the mode shows as a badge at the
+ right end of the status bar, and @onscreen{Modified} at the left end. These are provided by the
  @tt{drracket-vim-tool} package, which camp-app installs as a dependency (as a side effect, a
  @onscreen{Vim Mode} also becomes available in DrRacket).}
 
