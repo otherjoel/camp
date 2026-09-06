@@ -138,7 +138,20 @@
             (end-edit-sequence)])
          (set-position (+ start (string-length filled)))]))))
 
+;; The text block is centered, iA Writer style: the left padding is whatever
+;; centers a wrap-column-wide block in the view, never less than min-margin,
+;; and never less than a long file's line numbers need; the right margin is
+;; bare view space of the same width. The gutter lives inside the left
+;; padding, so toggling line numbers never moves the text.
+(define min-margin 32)
 (define line-number-gap 8)
+
+;; Auto-wrap hands text% the view width, and text% lays lines out in that
+;; less twice the left padding and a caret allowance (racket/gui 9.3), so
+;; the column would fall short of the view less both margins by the
+;; allowance; the slack in set-max-width below restores it. Right padding
+;; would only widen the extent and summon a horizontal scrollbar, hence none.
+(define wrap-slack 12)
 
 ;; A small gutter drawn in the text's left padding: smaller dimmed numbers in
 ;; the standard style's color (so color schemes still work), full-strength on
@@ -149,12 +162,14 @@
   (class %
     (inherit get-dc get-admin get-canvas last-line line-location line-paragraph
              get-visible-line-range position-paragraph
-             get-start-position get-end-position
+             get-start-position get-end-position auto-wrap
              set-padding invalidate-bitmap-cache in-edit-sequence? get-style-list)
     ;; fields precede super-new: augments below fire during superclass init
     (define show? #t)
     (define padding-left 0)
     (super-new)
+    ;; soft-wrap at the column: long tokens fold instead of scrolling sideways
+    (auto-wrap #t)
 
     (define/public (show-line-numbers! on?)
       (set! show? on?)
@@ -164,17 +179,39 @@
 
     (define/private (setup-gutter!)
       (define dc (get-dc))
+      (define admin (get-admin))
+      (define view-w
+        (and dc admin
+             (let ([w (box 0)])
+               (send admin get-view #f #f w #f)
+               (and (positive? (unbox w)) (unbox w)))))
       (define new-left
         (cond
-          [(and show? dc)
-           (define widest (number->string (max 100 (add1 (last-line)))))
-           (define-values (w _h _b _s)
+          [view-w
+           (define widest (number->string (max 10 (add1 (last-line)))))
+           (define-values (nw _h _b _s)
              (send dc get-text-extent widest (obs-peek @gutter-font)))
-           (+ w line-number-gap)]
-          [else 0]))
+           (define sl (get-style-list))
+           (define-values (cw _ch _cd _ce)
+             (send dc get-text-extent
+                   "0" (send (or (send sl find-named-style "Standard") (send sl basic-style))
+                             get-font)))
+           (inexact->exact
+            (ceiling (max min-margin
+                          (+ nw line-number-gap)
+                          (/ (- view-w (* cw (obs-peek @fill-column))) 2))))]
+          [else min-margin]))
       (unless (= new-left padding-left)
         (set! padding-left new-left)
         (set-padding new-left 0 0 0)))
+
+    ;; auto-wrap hands over the view width on every display-size
+    (define/override (set-max-width w)
+      (super set-max-width (if (real? w) (+ w wrap-slack) w)))
+
+    (define/augment (on-display-size)
+      (inner (void) on-display-size)
+      (setup-gutter!))
 
     (define/augment (after-insert start len)
       (inner (void) after-insert start len)
@@ -189,9 +226,8 @@
     (define/override (on-paint before? dc left top right bottom dx dy draw-caret)
       (super on-paint before? dc left top right bottom dx dy draw-caret)
       (unless before?
-        (when (and show? (zero? padding-left)) (setup-gutter!))
-        (when (and show? (positive? padding-left))
-          (draw-gutter dc dx dy top bottom))))
+        (when (zero? padding-left) (setup-gutter!))
+        (when show? (draw-gutter dc dx dy top bottom))))
 
     (define/private (draw-gutter dc dx dy top bottom)
       (define num-font (obs-peek @gutter-font))
@@ -399,14 +435,15 @@
   (send ed refresh-completions)
   (send ed refresh-lang-info!)
   (send ed show-line-numbers! (obs-peek @line-numbers?))
-  ;; wide enough to show a full wrap-column line plus gutter, insets, scrollbar
+  ;; wide enough to center a wrap-column-wide block between two min-margins,
+  ;; plus the scrollbar
   (define window-width
     (let* ([sl (editor:get-standard-style-list)]
            [font (send (or (send sl find-named-style "Standard") (send sl basic-style))
                        get-font)]
            [dc (new bitmap-dc% [bitmap (make-bitmap 1 1)])])
       (define-values (cw _h _d _e) (send dc get-text-extent "0" font))
-      (max 760 (inexact->exact (ceiling (+ (* cw (+ (obs-peek @fill-column) 4)) 110))))))
+      (inexact->exact (ceiling (+ (* cw (obs-peek @fill-column)) (* 2 min-margin) 40)))))
   (define r #f)
   (define find-field (box #f))
 
@@ -522,7 +559,7 @@
           #:size (list window-width 820)
           #:mixin editor-window-mixin
           editor-menu-bar
-          (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(12 8))
+          (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(0 8))
           (hpanel #:stretch '(#t #f)
                   #:spacing 12
                   (input @find-text
