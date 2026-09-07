@@ -17,7 +17,7 @@ Butterick}, @hyperlink["https://lexi-lambda.github.io/about.html"]{Alexis King},
 
 The Camp logo was commissioned from @hyperlink["https://www.fiverr.com/buzzzy"]{Buzzzy}.
 
-The source code is available at @url{https://codeberg.org/joeld/camp}.
+The source code is available at @url{https://github.com/otherjoel/camp}.
 
 The Camp Computer toolbar icons are from the
 @hyperlink["https://www.flaticon.com/packs/canada-25"]{Canada icon pack},
