@@ -22,6 +22,8 @@
          @light-scheme
          @dark-scheme
          @appearance-mode
+         @main-geometry
+         @editor-geometry
          update-pref!
          remove-from-pref!
          add-to-pref!
@@ -124,3 +126,10 @@
 (define @dark-scheme (make-@pref 'dark-scheme 'white-on-black))
 
 (define @appearance-mode (make-@pref 'appearance-mode 'system))
+
+;; Window placement per monitor layout: (screens x y w h) entries, most
+;; recent first (see remember-geometry-mix in camp/app/private/gui)
+
+(define @main-geometry (make-@pref 'main-geometry '()))
+
+(define @editor-geometry (make-@pref 'editor-geometry '()))

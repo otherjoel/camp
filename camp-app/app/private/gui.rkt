@@ -6,10 +6,12 @@
          camp/log
          (only-in camp/private/log use-color?)
          camp/private/ansi
+         camp/app/private/window-geometry
          racket/class
          racket/gui/easy
          racket/gui/easy/operator
          racket/list
+         racket/match
          racket/string)
 
 (use-color? #t)
@@ -17,6 +19,7 @@
 (provide badge
          draw-badge
          dragdrop-mix
+         remember-geometry-mix
          make-mix-close
          ?dialog
          set-main-frame!
@@ -258,6 +261,82 @@
    (vpanel
     (text msg)
     (button "Close" close!))))
+
+;; ============================================================================
+;; Window geometry
+
+;; A frame mixin that keeps the window's placement in @geom and puts the
+;; window back when it is next shown. Placement is kept per monitor layout:
+;; @geom holds a short history of (screens x y w h) entries, most recent
+;; first, where screens is the list of screen frames at the time, so a
+;; laptop that has gone from two monitors to one and back finds its
+;; two-monitor spot again. Without an entry for the current layout, the
+;; most recent one is used when its title bar still lands on an attached
+;; screen; otherwise the frame keeps its default centering. When another
+;; of the frames `others` lists already sits at the spot, the window
+;; cascades down and right of it. Moves and resizes stream in during a
+;; drag, so the save is debounced.
+(define layout-history 8)
+
+(define (title-bar-on-screen? x y w)
+  (for/or ([screen (in-list (screen-frames))])
+    (match-define (list left top sw sh) screen)
+    (and (<= left (+ x w -100))
+         (<= (+ x 100) (+ left sw))
+         (<= top y)
+         (<= (+ y 40) (+ top sh)))))
+
+(define (remember-geometry-mix @geom #:others [others (λ () '())])
+  (λ (%)
+    (class %
+      (define (entries)
+        (define v (obs-peek @geom))
+        (if (and (list? v) (andmap pair? v)) v '()))
+      (define (save!)
+        (define screens (screen-frames))
+        (define kept (filter (λ (e) (not (equal? (car e) screens))) (entries)))
+        (@geom . := . (cons (cons screens (window-frame this))
+                            (take kept (min layout-history (length kept))))))
+      (define saver (new timer% [notify-callback save!]))
+      (define (save-soon!) (send saver start 250 #t))
+      (define shown? #f)
+      (super-new)
+      (inherit resize)
+
+      (define (restore!)
+        (define saved (entries))
+        (match (or (assoc (screen-frames) saved) (and (pair? saved) (car saved)))
+          [(list _ x y w h)
+           (define-values (sw sh) (primary-visible-size))
+           (resize (min w sw) (min h sh))
+           (define taken (for/list ([f (in-list (others))]) (take (window-frame f) 2)))
+           (define-values (fx fy)
+             (let free ([x x] [y y])
+               (if (member (list x y) taken) (free (+ x 22) (+ y 22)) (values x y))))
+           (when (title-bar-on-screen? fx fy w)
+             (set-window-top-left! this fx fy))]
+          [_ (void)]))
+      ;; gui-easy centers the frame between construction and its first show
+      (define/override (show on?)
+        (when (and on? (not shown?))
+          (set! shown? #t)
+          (restore!))
+        (super show on?))
+
+      (define/override (on-move x y)
+        (super on-move x y)
+        (save-soon!))
+      (define/override (on-size w h)
+        (super on-size w h)
+        (save-soon!))
+      (define/override (on-exit)
+        (send saver stop)
+        (save!)
+        (super on-exit))
+      (define/augment (on-close)
+        (send saver stop)
+        (save!)
+        (inner (void) on-close)))))
 
 ;; ============================================================================
 ;; Drag and drop mixin

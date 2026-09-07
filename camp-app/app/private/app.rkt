@@ -980,7 +980,9 @@
    #:size '(900 700)
    #:stretch '(#t #t)
    #:title "Camp"
-   #:mixin (λ (%) (dragdrop-mix (class % (super-new) (set-main-frame! this))))
+   #:mixin (λ (%)
+             ((remember-geometry-mix @main-geometry)
+              (dragdrop-mix (class % (super-new) (set-main-frame! this)))))
    :main-menu
    (vpanel
     (hpanel

@@ -25,7 +25,8 @@
          camp/app/private/editor-utils
          camp/app/private/fonts
          camp/app/private/gui
-         (only-in camp/app/private/settings @vim-mode @fill-column @line-numbers?))
+         (only-in camp/app/private/settings
+                  @vim-mode @fill-column @line-numbers? @editor-geometry))
 
 (provide open-editor!)
 
@@ -286,60 +287,113 @@
 ;; The caret is one fixed light blue in both polarities: the insertion caret
 ;; (vim insert mode, and always without vim) is a bar painted over text%'s
 ;; hairline, which has no color or width of its own, and the vim block cursor
-;; is a translucent wash of it so the glyph beneath stays visible. The vim
-;; tool draws its block and its visual selection as highlights in private
-;; constant colors upstream ("slategray" / "lightsteelblue"), so the highlight
-;; call is intercepted to substitute the caret blue and the scheme's selection
-;; color.
+;; is a solid cell of it with the glyph beneath redrawn in black. The vim tool
+;; draws its block as a "slategray" highlight, or, at a line end, as its own
+;; rectangle in on-paint (in visual mode at its private anchor, which is then
+;; whichever selection end sits on an empty line); both are painted over here.
+;; Its visual selection is a "lightsteelblue" highlight, swapped for the
+;; scheme's selection color.
 (define caret-color (make-color 31 190 255))
 (define caret-bar-width 2)
-
-(define (translucent c)
-  (make-color (send c red) (send c green) (send c blue) 0.4))
 
 (define (cursor-mixin %)
   (class %
     (inherit get-start-position get-end-position position-location
-             caret-hidden? invalidate-bitmap-cache)
+             caret-hidden? invalidate-bitmap-cache vim?
+             position-line line-start-position line-end-position
+             find-snip get-snip-location get-character get-style-list)
     (super-new)
+    (define block-pos #f)
     (define/override (highlight-range start end color
                                       [caret-space? #f] [priority 'low] [style 'rectangle]
                                       #:adjust-on-insert/delete? [adjust? #f]
                                       #:key [key #f])
-      (super highlight-range start end
-             (cond
-               [(not (eq? key 'drracket-vim-highlight)) color]
-               [(equal? color "slategray") (translucent caret-color)]
-               [(equal? color "lightsteelblue") (obs-peek @vim-selection-color)]
-               [else color])
-             caret-space? priority style
-             #:adjust-on-insert/delete? adjust? #:key key))
+      (cond
+        [(and (eq? key 'drracket-vim-highlight) (equal? color "slategray"))
+         (set! block-pos start)]
+        [else
+         (super highlight-range start end
+                (if (and (eq? key 'drracket-vim-highlight) (equal? color "lightsteelblue"))
+                    (obs-peek @vim-selection-color)
+                    color)
+                caret-space? priority style
+                #:adjust-on-insert/delete? adjust? #:key key)]))
+    (define/override (unhighlight-ranges/key key)
+      (when (eq? key 'drracket-vim-highlight) (set! block-pos #f))
+      (super unhighlight-ranges/key key))
 
-    ;; The bar at pos as (x y w h), straddling the hairline's column
-    (define (caret-bar pos)
+    (define (at-line-end? pos) (= pos (line-end-position (position-line pos))))
+    (define (on-empty-line? pos) (= pos (line-start-position (position-line pos))
+                                    (line-end-position (position-line pos))))
+    (define (block-positions)
+      (define start (get-start-position))
+      (define end (get-end-position))
+      (cond
+        [block-pos (list block-pos)]
+        [(not (and (vim?) (caret-hidden?))) '()]
+        [(= start end) (if (at-line-end? start) (list start) '())]
+        [else (filter on-empty-line? (remove-duplicates (list start end)))]))
+
+    ;; The cell at pos as (x top bottom) in editor coordinates
+    (define (cell pos)
       (define x (box 0))
       (define top (box 0))
       (define bottom (box 0))
-      (position-location pos x top #t)
-      (position-location pos #f bottom #f)
-      (values (- (unbox x) 0.5) (unbox top) caret-bar-width (- (unbox bottom) (unbox top))))
+      (position-location pos x top #t #f #t)
+      (position-location pos #f bottom #f #f #t)
+      (values (unbox x) (unbox top) (unbox bottom)))
+
+    ;; The bar at pos as (x y w h), straddling the hairline's column
+    (define (caret-bar pos)
+      (define-values (x top bottom) (cell pos))
+      (values (- x 0.5) top caret-bar-width (- bottom top)))
+
+    (define (draw-block dc dx dy pos)
+      (define-values (x top bottom) (cell pos))
+      (define snip (and (not (at-line-end? pos)) (find-snip pos 'after-or-none)))
+      (define font (send (if snip (send snip get-style) (send (get-style-list) basic-style)) get-font))
+      (define width
+        (cond
+          [snip (let-values ([(nx _t _b) (cell (add1 pos))]) (- nx x))]
+          [else (let-values ([(w _h _d _s) (send dc get-text-extent "a" font)]) w)]))
+      (send dc set-brush caret-color 'solid)
+      (send dc draw-rectangle (+ x dx) (+ top dy) width (- bottom top))
+      (when snip
+        (define sy (box 0))
+        (get-snip-location snip #f sy)
+        (send dc set-font font)
+        (send dc draw-text (string (get-character pos)) (+ x dx) (+ (unbox sy) dy))))
 
     (define/override (on-paint before? dc left top right bottom dx dy draw-caret)
       (super on-paint before? dc left top right bottom dx dy draw-caret)
-      (define pos (get-start-position))
-      (when (and (not before?)
-                 (eq? draw-caret 'show-caret)
-                 (not (caret-hidden?))
-                 (= pos (get-end-position)))
-        (define-values (x y w h) (caret-bar pos))
-        (when (and (<= x right) (<= left (+ x w)) (<= y bottom) (<= top (+ y h)))
+      (unless before?
+        (define pos (get-start-position))
+        (define bar?
+          (and (eq? draw-caret 'show-caret)
+               (not (caret-hidden?))
+               (= pos (get-end-position))))
+        (define blocks (block-positions))
+        (when (or bar? (pair? blocks))
           (define pen (send dc get-pen))
           (define brush (send dc get-brush))
+          (define font (send dc get-font))
+          (define fg (send dc get-text-foreground))
+          (define mode (send dc get-text-mode))
           (send dc set-pen "black" 0 'transparent)
-          (send dc set-brush caret-color 'solid)
-          (send dc draw-rectangle (+ x dx) (+ y dy) w h)
+          (send dc set-text-foreground "black")
+          (send dc set-text-mode 'transparent)
+          (when bar?
+            (define-values (x y w h) (caret-bar pos))
+            (when (and (<= x right) (<= left (+ x w)) (<= y bottom) (<= top (+ y h)))
+              (send dc set-brush caret-color 'solid)
+              (send dc draw-rectangle (+ x dx) (+ y dy) w h)))
+          (for ([p (in-list blocks)])
+            (draw-block dc dx dy p))
           (send dc set-pen pen)
-          (send dc set-brush brush))))
+          (send dc set-brush brush)
+          (send dc set-font font)
+          (send dc set-text-foreground fg)
+          (send dc set-text-mode mode))))
 
     ;; text% refreshes only its hairline when the caret moves; refresh the
     ;; bar's full width where it was and where it is
@@ -406,6 +460,9 @@
              (not (send ed is-modified?))]
         [(2) #t]
         [else #f])))
+
+(define (editor-frames)
+  (for/list ([r (in-hash-values open-editors)]) (renderer-root r)))
 
 (define (find-editor-canvas w)
   (cond
@@ -572,7 +629,8 @@
          (window
           #:title @title
           #:size (list window-width 820)
-          #:mixin editor-window-mixin
+          #:mixin (λ (%) ((remember-geometry-mix @editor-geometry #:others editor-frames)
+                          (editor-window-mixin %)))
           editor-menu-bar
           (editor-canvas ed #:style '(auto-hscroll auto-vscroll) #:inset '(0 8))
           ;; Status bar: the Modified badge's slot, then the find field or the
