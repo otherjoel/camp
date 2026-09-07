@@ -13,6 +13,7 @@ mysite/
 *.md
 !README.md
 !CODE_OF_CONDUCT.md
+!LICENSE.md
 *.html
 *.js
 *.css
