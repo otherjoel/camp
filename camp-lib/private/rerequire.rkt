@@ -2,11 +2,10 @@
 
 (require compiler/cm
          compiler/compilation-path
-         file/sha1
          racket/path
-         racket/promise
          racket/rerequire
-         syntax/modresolve)
+         syntax/modresolve
+         "log.rkt")
 
 (provide live-reload?
          live-cache-root!
@@ -47,18 +46,33 @@
                (and (path? base) (loop base)))))))
 
 ;; Report a freshness stamp for out-of-boundary modules so the compilation
-;; manager records them as dependencies without compiling them. The stamp
-;; reflects the source only: installed bytecode must not mask source edits,
-;; since live loading ignores that bytecode. The sha1 makes edits within
-;; one mtime second still register.
+;; manager records them as dependencies without compiling them. Cached site
+;; bytecode links against the library instance the regular loader declares,
+;; so the stamp follows that form: the installed bytecode, or the source
+;; when it is newer. A library recompiled from unchanged source (a Racket
+;; upgrade; raco setup after one of its own dependencies was edited) thereby
+;; still invalidates its dependents in the cache.
+;;
+;; A library recompiled during a session cannot be reloaded (the live
+;; namespace keeps its first instance), but cache written from then on must
+;; still link against the new bytecode its stamp records, so the next
+;; session finds it consistent: dependents are compiled in a fresh
+;; compilation namespace (see below) rather than against the stale
+;; declaration.
+(define stamps (make-hash))
+
 (define ((skip-outside entry) path)
   (define p (simple-form-path path))
   (and (not (equal? p entry))
        (not (in-cache? p))
-       (if (file-exists? p)
-           (cons (file-or-directory-modify-seconds p)
-                 (delay/sync (call-with-input-file p sha1)))
-           (cons -inf.0 ""))))
+       (let ([stamp (or (file-stamp-in-paths p (list (car (explode-path p)))) ; any path is under its own root
+                        (cons -inf.0 ""))]
+             [seen (hash-ref stamps p #f)])
+         (hash-set! stamps p stamp)
+         (when (and seen (not (equal? (car seen) (car stamp))))
+           (log-camp-warning "Recompiled since this session started; restart to use it: ~a" p)
+           (raise (exn:stale-namespace)))
+         stamp)))
 
 ;; Compilation runs in a private namespace: instantiating a module here (for
 ;; a dependent's expansion) must not declare it in the live namespace, where
@@ -71,6 +85,23 @@
 
 (struct exn:stale-namespace ())
 
+;; A module declared here is not loaded again when a dependent requires it,
+;; so its staleness would pass unnoticed whenever the dependent is compiled
+;; outright (its own source changed) rather than after its dependencies:
+;; have the compilation manager check such declarations on resolution.
+(define (checking-resolver orig)
+  (case-lambda
+    [(name ns) (orig name ns)]
+    [(mod rel stx load?)
+     (when load?
+       (define name (resolved-module-path-name (orig mod rel stx #f)))
+       (define file (if (pair? name) (car name) name))
+       (when (path? file)
+         (define p (simple-form-path file))
+         (when (and (in-cache? p) (module-declared? (make-resolved-module-path p)))
+           (managed-compile-zo p))))
+     (orig mod rel stx load?)]))
+
 (define (compile-live! path)
   (let retry ()
     (define ns (unbox compile-namespace))
@@ -80,6 +111,7 @@
                        (retry))])
       (parameterize* ([use-compiled-file-paths (cons live-mode (use-compiled-file-paths))]
                       [current-namespace ns]
+                      [current-module-name-resolver (checking-resolver (current-module-name-resolver))]
                       [current-load/use-compiled (make-compilation-manager-load/use-compiled-handler)]
                       [compile-enforce-module-constants #f]
                       [manager-skip-file-handler (skip-outside path)]

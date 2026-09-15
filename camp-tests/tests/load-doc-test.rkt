@@ -43,15 +43,23 @@
 (define (doc-body-string p)
   (format "~a" (load-doc p)))
 
+;; Compile in a subprocess, as raco setup would: compiling in this process
+;; would load the module's declaration here and defeat the point of the tests
+(define (raco-make! p)
+  (check-true (system* (build-path (find-console-bin-dir) "raco") "make" (path->string p))))
+
 ;; The live cache for src lives in a "camp-live" mode dir next to it,
 ;; possibly rerooted by current-compiled-file-roots.
-(define (live-zo-exists? src)
+(define (live-zo src)
   (define-values (dir name _dir?) (split-path src))
   (define zo-name (path-add-extension name #".zo" #"_"))
-  (for/or ([p (in-directory dir)])
-    (and (equal? (file-name-from-path p) zo-name)
-         (member (string->path "camp-live") (explode-path p))
-         #t)))
+  (for/first ([p (in-directory dir)]
+              #:when (and (equal? (file-name-from-path p) zo-name)
+                          (member (string->path "camp-live") (explode-path p))))
+    p))
+
+(define (live-zo-exists? src)
+  (and (live-zo src) #t))
 
 ;; ---------------------------------------------------------------------------
 ;; Outside live-reload mode (one-shot builds), loading must not discard
@@ -113,6 +121,7 @@
 (check-regexp-match #rx"HELLO FROM V1" (doc-body-string dep-page))
 
 (write-helper! helper "HELLO FROM V2")
+(write-dep-page! dep-page "•greeting[] (again)") ; expansion declares the helper in the compilation namespace
 (check-regexp-match #rx"HELLO FROM V2" (doc-body-string dep-page))
 
 ;; Compile-time staleness: a dependency edit that adds an export, used by an
@@ -160,10 +169,7 @@
 
 (write-helper! chelper "COMPILED DEP V1")
 (write-dep-page! cdep-page "•greeting[]")
-;; Compile in a subprocess, as raco setup would: compiling in this process
-;; would load the helper's declaration here and defeat the point of the test
-(check-true (system* (build-path (find-console-bin-dir) "raco")
-                     "make" (path->string cdep-page)))
+(raco-make! cdep-page)
 
 (live-cache-root! cdep-dir)
 (check-regexp-match #rx"COMPILED DEP V1" (doc-body-string cdep-page))
@@ -197,5 +203,63 @@
 (check-false (live-zo-exists? outside-lib) "live cache must not extend outside the boundary")
 (delete-directory/files site-dir)
 (delete-directory/files lib-dir)
+
+;; ---------------------------------------------------------------------------
+;; Cached site bytecode links against the installed bytecode of the libraries
+;; it imports, so it must be rebuilt when that bytecode changes even though
+;; the library's own source has not: after a Racket upgrade, or a raco setup
+;; of a library whose dependency was edited. (A reexported binding links
+;; straight to the defining module's instance; a stale cache then fails to
+;; instantiate with "reference to a variable that is not exported".) A
+;; running session keeps the library instance it first declared, but the
+;; cache it writes from then on must already suit the next session.
+
+(define (load-doc-in-new-session site page)
+  (define out (open-output-string))
+  (parameterize ([current-output-port out])
+    (check-true (system* (build-path (find-console-bin-dir) "racket")
+                         "-l" "racket/base" "-l" "camp/private/rerequire" "-l" "camp/private/collections"
+                         "-e" (format "(live-reload? #t) (live-cache-root! ~s) (display (load-doc (string->path ~s)))"
+                                      (path->string site) (path->string page)))))
+  (get-output-string out))
+
+(define relink-site (make-temporary-directory "load-doc-test-relink-site-~a"))
+(define relink-lib (make-temporary-directory "load-doc-test-relink-lib-~a"))
+(define relink-dep (build-path relink-lib "outdep.rkt"))
+(define relink-out (build-path relink-lib "outlib.rkt"))
+(define relink-helper (build-path relink-site "helper.rkt"))
+(define relink-page (build-path relink-site "relink-page.md.rkt"))
+
+(define (write-relink-dep! sep)
+  (write-mod! relink-dep
+              (format "#lang racket/base\n(provide twice)\n(define (twice s) (string-append s ~s s))\n" sep)))
+
+(write-relink-dep! "")
+(write-mod! relink-out
+            (format "#lang racket/base\n(require (file ~s))\n(provide twice)\n" (path->string relink-dep)))
+(write-mod! relink-helper
+            (format "#lang racket/base\n(require (file ~s))\n(provide greeting)\n(define (greeting) (twice \"RELINK\"))\n"
+                    (path->string relink-out)))
+(write-dep-page! relink-page "•greeting[]")
+(raco-make! relink-out)
+
+(live-cache-root! relink-site)
+(check-regexp-match #rx"RELINKRELINK" (doc-body-string relink-page))
+(define relink-helper-dep (path-replace-extension (live-zo relink-helper) #".dep"))
+(define relink-recorded (file->string relink-helper-dep))
+;; Written this second, the cache would tie with the library bytecode compiled next
+(for ([f (list (live-zo relink-helper) relink-helper-dep)])
+  (file-or-directory-modify-seconds f (- (current-seconds) 10)))
+
+(write-relink-dep! "+")
+;; From scratch: cm itself misses a dependency rebuilt within the same second
+(delete-directory/files (build-path relink-lib "compiled"))
+(raco-make! relink-out)
+(check-not-exn (λ () (doc-body-string relink-page)) "a running session must survive a library recompile")
+(check-regexp-match #rx"RELINK\\+RELINK" (load-doc-in-new-session relink-site relink-page))
+(check-not-equal? (file->string relink-helper-dep) relink-recorded
+                  "recompiled library bytecode must rebuild the cache of its dependents")
+(delete-directory/files relink-site)
+(delete-directory/files relink-lib)
 
 (live-reload? #f)
