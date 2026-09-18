@@ -67,10 +67,10 @@
 ;; ---------------------------------------------------------------------------
 ;; Source Loading
 
-;; Unlike punct's get-doc, registers the module with rerequire so later edits
-;; to the source are picked up within a long-running process. A source module
-;; first loaded any other way can never be reloaded in that process, so all
-;; doc loading must go through this function.
+;; Unlike punct's get-doc, loads through rerequire! so later edits to the
+;; source or its dependencies are picked up within a long-running process. A
+;; source module first loaded any other way can never be reloaded in that
+;; process, so all doc loading must go through this function.
 (define (load-doc p)
   (rerequire! p)
   (dynamic-require p 'doc))

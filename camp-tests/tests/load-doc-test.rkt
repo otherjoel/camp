@@ -12,12 +12,14 @@
          compiler/compilation-path
          racket/file
          racket/list
+         racket/logging
          racket/path
          racket/system
          setup/dirs
          punct/fetch
          (only-in camp/private/collections load-doc)
-         (only-in camp/private/rerequire live-reload? live-cache-root!))
+         (only-in camp/private/log camp-logger)
+         (only-in camp/private/rerequire live-reload? live-cache-root! rerequire!))
 
 ;; Edits within the same real-time second would evade rerequire's mtime
 ;; checks, while future-dated sources are refused by the compilation manager.
@@ -37,8 +39,8 @@
 (define (write-helper! h greeting)
   (write-mod! h (format "#lang racket/base\n(provide greeting)\n(define (greeting) ~s)\n" greeting)))
 
-(define (write-dep-page! p body)
-  (write-mod! p (format "#lang punct \"helper.rkt\"\n---\ntitle: Dep Page\ndate: 2026-01-01\n---\n\n~a\n" body)))
+(define (write-dep-page! p body [dep "helper.rkt"])
+  (write-mod! p (format "#lang punct ~s\n---\ntitle: Dep Page\ndate: 2026-01-01\n---\n\n~a\n" dep body)))
 
 (define (doc-body-string p)
   (format "~a" (load-doc p)))
@@ -133,7 +135,91 @@
                            "(define (shout) \"NEW EXPORT\")\n"))
 (write-dep-page! dep-page "•greeting[] •shout[]")
 (check-regexp-match #rx"HELLO FROM V3.*NEW EXPORT" (doc-body-string dep-page))
+
+;; Reloads are reported through the camp logger, relative to the cache root,
+;; and never on stderr; first loads and unchanged modules are not reported.
+(define (load-doc-report p)
+  (define msgs '())
+  (define err (open-output-string))
+  (parameterize ([current-error-port err])
+    (with-intercepted-logging
+      (λ (v) (set! msgs (cons (vector-ref v 1) msgs)))
+      (λ () (load-doc p))
+      #:logger camp-logger 'info 'camp))
+  (list (reverse msgs) (get-output-string err)))
+
+(define fresh-page (build-path dep-dir "fresh-page.md.rkt"))
+(write-dep-page! fresh-page "•greeting[]")
+(check-equal? (load-doc-report fresh-page) '(() ""))
+(check-equal? (load-doc-report dep-page) '(() ""))
+
+(write-mod! helper
+            (string-append "#lang racket/base\n(provide greeting shout)\n"
+                           "(define (greeting) \"HELLO FROM V4\")\n"
+                           "(define (shout) \"NEW EXPORT\")\n"))
+(let ([report (load-doc-report dep-page)])
+  (check-equal? (length (car report)) 2)
+  (check-regexp-match #rx"Reloaded.* helper\\.rkt$" (car (car report)))
+  (check-regexp-match #rx"Reloaded.* dep-page\\.md\\.rkt$" (cadr (car report)))
+  (check-equal? (cadr report) ""))
 (delete-directory/files dep-dir)
+
+;; ---------------------------------------------------------------------------
+;; An edited dependency must reach every dependent, although each is loaded
+;; by a call of its own and the dependency is already current again by the
+;; second: pages sharing a helper, a page reaching it through a module no
+;; earlier call visited, and pages loaded after a render module that shares
+;; it (the order the file watcher uses).
+
+(define share-dir (make-temporary-directory "load-doc-test-share-~a"))
+(define share-helper (build-path share-dir "helper.rkt"))
+(define share-mid (build-path share-dir "mid.rkt"))
+(define share-render (build-path share-dir "render.rkt"))
+(define share-pages
+  (for/list ([name (in-list '("a.md.rkt" "b.md.rkt" "c.md.rkt"))])
+    (build-path share-dir name)))
+
+(write-helper! share-helper "SHARED V1")
+(write-mod! share-mid
+            "#lang racket/base\n(require \"helper.rkt\")\n(provide greeting)\n")
+(write-mod! share-render
+            "#lang racket/base\n(require \"helper.rkt\")\n(provide render)\n(define (render) (greeting))\n")
+(for ([page (in-list share-pages)]
+      [dep (in-list '("helper.rkt" "helper.rkt" "mid.rkt"))])
+  (write-dep-page! page "•greeting[]" dep))
+
+(define (share-render-string)
+  (rerequire! share-render)
+  ((dynamic-require share-render 'render)))
+
+(live-cache-root! share-dir)
+(check-equal? (share-render-string) "SHARED V1")
+(for ([page (in-list share-pages)])
+  (check-regexp-match #rx"SHARED V1" (doc-body-string page)))
+
+(write-helper! share-helper "SHARED V2")
+(check-equal? (share-render-string) "SHARED V2")
+(for ([page (in-list share-pages)])
+  (check-regexp-match #rx"SHARED V2" (doc-body-string page) (path->string page)))
+
+(write-helper! share-helper "SHARED V3")
+(for ([page (in-list share-pages)])
+  (check-regexp-match #rx"SHARED V3" (doc-body-string page) (path->string page)))
+(check-equal? (share-render-string) "SHARED V3")
+
+;; A page that requires another page is a dependent like any other
+(define quoted-page (build-path share-dir "quoted.md.rkt"))
+(define quoting-page (build-path share-dir "quoting.md.rkt"))
+(write-page! quoted-page "QUOTED ONE")
+(write-page! quoting-page
+             "•(require (prefix-in q: \"quoted.md.rkt\"))\n\n•(format \"~a\" q:doc)")
+(check-regexp-match #rx"QUOTED ONE" (doc-body-string quoted-page))
+(check-regexp-match #rx"QUOTED ONE" (doc-body-string quoting-page))
+
+(write-page! quoted-page "QUOTED TWO")
+(check-regexp-match #rx"QUOTED TWO" (doc-body-string quoted-page))
+(check-regexp-match #rx"QUOTED TWO" (doc-body-string quoting-page))
+(delete-directory/files share-dir)
 
 ;; ---------------------------------------------------------------------------
 ;; A page with raco-compiled bytecode must still be reloadable: that bytecode
