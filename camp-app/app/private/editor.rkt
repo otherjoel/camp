@@ -101,6 +101,9 @@
     (define/augment (after-delete start len)
       (send completion-timer start completion-idle-ms #t)
       (inner (void) after-delete start len))
+    (define/augment (on-close)
+      (send completion-timer stop)
+      (inner (void) on-close))
     (define/override (get-all-words)
       (define fn (get-filename))
       (remove-duplicates
@@ -576,6 +579,9 @@
       ;; its own frame's on-close re-enters gui-easy mid-teardown
       (define/augment (on-close)
         (hash-remove! open-editors key)
+        ;; framework frames send this; without it the autoload monitor keeps
+        ;; watching the file on behalf of the dead window
+        (send ed on-close)
         (obs-unobserve! @vim-mode vim-sync)
         (obs-unobserve! @line-numbers? line-numbers-sync)
         (obs-unobserve! @gutter-font gutter-font-sync)
