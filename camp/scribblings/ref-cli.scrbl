@@ -66,7 +66,8 @@ rebuilds.
 When watching is enabled, Camp monitors source documents, render modules, static files, and the
 site configuration. Changes trigger appropriate actions: source document or render module changes
 trigger a full rebuild, static file changes sync to the output folder, and configuration changes
-reload the site and rebuild.
+reload the site and rebuild. Camp checks the modification times of these files twice a second, so
+an edit, a new file or a deleted file is noticed within about half a second of being saved.
 
 A rebuild renders every page, but reloads only the modules an edit affects: the edited module and
 every source document or render module that depends on it, directly or through other modules of
