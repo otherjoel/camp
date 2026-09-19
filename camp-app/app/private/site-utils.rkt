@@ -82,6 +82,7 @@
         (output-path->url (format-output-path output-pattern slug date-val (document-metas doc)))))
     (vector (or (meta-ref doc 'date) "")
             (or (meta-ref doc 'title) "Untitled")
+            (if (meta-ref doc 'draft?) "Draft" "")
             url
             p)))
 

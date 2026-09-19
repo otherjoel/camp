@@ -173,7 +173,7 @@
 (define @folder-selection (@ (vec-ref? (obs-peek @folders) 0)))
 
 (define @source-doc-selection (@ ""))
-(define-values (date-col title-col file-col fullpath) (values 0 1 2 3))
+(define-values (date-col title-col status-col file-col fullpath) (values 0 1 2 3 4))
 (define @source-sorting (@ (cons date-col string-ci>?)))
 
 (define month-names #("Jan" "Feb" "Mar" "Apr" "May" "Jun"
@@ -192,6 +192,7 @@
 (define (source-entry->row entry)
   (vector (format-display-date (vector-ref entry date-col))
           (~a (vector-ref entry title-col))
+          (vector-ref entry status-col)
           (~a (vector-ref entry file-col))))
 
 (define (sort-pages pages sorting)
@@ -380,13 +381,14 @@
           [else (super on-subwindow-event receiver event)])))))
 
 (define :source-docs-table
-  (table '("Date" "Title" "URL") @sources-in-folder
+  (table '("Date" "Title" "Status" "URL") @sources-in-folder
          on-source-select
          #:entry->row source-entry->row
          #:mixin source-table-mixin
          #:column-widths '((0 120 80 150)
                            (1 300 100 600)
-                           (2 200 100 300))))
+                           (2 60 50 100)
+                           (3 200 100 300))))
 
 ;; ============================================================================
 ;; Components: Toolbar

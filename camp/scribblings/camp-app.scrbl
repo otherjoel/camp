@@ -34,6 +34,9 @@ file to get a context menu with @onscreen{Edit}, @onscreen{Preview} and @onscree
 Previewing will start the project server (if it is not already started) and open your browser to the
 localhost URL for that page.
 
+The @onscreen{Status} column shows @onscreen{Draft} for any page whose @racket['draft?] meta is
+present and not @racket[#f]. Click the column header to sort the drafts together.
+
 The toolbar buttons are pretty straightforward:
 
 @itemlist[
