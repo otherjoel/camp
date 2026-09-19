@@ -911,6 +911,10 @@
                      #:min-size '(64 #f)
                      #:stretch '(#f #f))
               (pref-caption "⌘J re-wraps the current paragraph"))
+    (pref-row ""
+              (checkbox (λ (on?) (@auto-fill? . := . (and on? #t)))
+                        #:label "Break lines at the wrap column while typing"
+                        #:checked? @auto-fill?))
     (pref-group-gap)
     (apply pref-row "Editor font:" (font-slot-controls 0))
     (apply pref-row "" (font-slot-controls 1))

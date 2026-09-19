@@ -15,6 +15,7 @@
          @editor
          @vim-mode
          @fill-column
+         @auto-fill?
          @line-numbers?
          @font-slots
          @font-slot
@@ -106,6 +107,8 @@
 (define @vim-mode (make-@pref 'vim-mode #f))
 
 (define @fill-column (make-@pref 'fill-column 80))
+
+(define @auto-fill? (make-@pref 'auto-fill #t))
 
 (define @line-numbers? (make-@pref 'line-numbers #t))
 

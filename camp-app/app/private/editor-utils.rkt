@@ -6,7 +6,8 @@
          racket/math
          racket/string)
 
-(provide editor-title
+(provide auto-fill-edits
+         editor-title
          fill-paragraph
          fill-unit
          font-slot-label
@@ -160,35 +161,56 @@
       text
       (wrap-words words width indent indent)))
 
+;; Prefixes for a unit's first and later lines: quote markers and indent
+;; carry over, a list marker becomes a hanging indent
+(define (fill-prefixes l)
+  (define qp (quote-prefix l))
+  (define body (strip-quote l))
+  (define lead (or (item-prefix body) (car (regexp-match #px"^[ \t]*" body))))
+  (values (string-append qp lead)
+          (string-append qp (regexp-replace* #px"\\S" lead " "))))
+
 (define (rewrap lines top bottom width)
-  (define qp (quote-prefix (vector-ref lines top)))
-  (define stripped
-    (for/list ([i (in-range top (add1 bottom))])
-      (strip-quote (vector-ref lines i))))
-  (define marker (item-prefix (car stripped)))
-  (define-values (first-prefix cont-prefix)
-    (if marker
-        (values (string-append qp marker)
-                (string-append qp (make-string (string-length marker) #\space)))
-        (let ([indent (car (regexp-match #px"^[ \t]*" (car stripped)))])
-          (values (string-append qp indent)
-                  (string-append qp indent)))))
-  (define body-first
-    (if marker
-        (substring (car stripped) (string-length marker))
-        (car stripped)))
-  (wrap-words (append (string-split body-first)
-                      (append-map string-split (cdr stripped)))
+  (define-values (first-prefix cont-prefix) (fill-prefixes (vector-ref lines top)))
+  (wrap-words (append-map
+               string-split
+               (cons (substring (vector-ref lines top) (string-length first-prefix))
+                     (for/list ([i (in-range (add1 top) (add1 bottom))])
+                       (strip-quote (vector-ref lines i)))))
               width first-prefix cont-prefix))
+
+(define (fillable? lines idx)
+  (and (< idx (vector-length lines))
+       (not (boundary-line? (vector-ref lines idx)))
+       (not (in-fence? lines idx))
+       (not (let ([md (metadata-bounds lines)])
+              (and md (< (car md) idx) (<= idx (cdr md)))))))
+
+;; Auto-fill: the (start end replacement) column edits, rightmost first, that
+;; hard-wrap line idx alone as fill-unit would. Columns are the line's own, so
+;; a filled line never exceeds width however its words are spaced.
+(define (auto-fill-edits lines idx width)
+  (cond
+    [(and (fillable? lines idx)
+          (> (string-length (vector-ref lines idx)) width))
+     (define l (vector-ref lines idx))
+     (define-values (first-prefix cont-prefix) (fill-prefixes l))
+     (for/fold ([edits '()]
+                [line-start 0]
+                [prev-end #f]
+                #:result edits)
+               ([w (in-list (regexp-match-positions* #px"\\S+" l (string-length first-prefix)))])
+       (if (and prev-end (> (- (cdr w) line-start) width))
+           (values (cons (list prev-end (car w) (string-append "\n" cont-prefix)) edits)
+                   (- (car w) (string-length cont-prefix))
+                   (cdr w))
+           (values edits line-start (cdr w))))]
+    [else '()]))
 
 (define (fill-unit lines idx width)
   (define n (vector-length lines))
   (define (line i) (vector-ref lines i))
-  (and (< idx n)
-       (not (boundary-line? (line idx)))
-       (not (in-fence? lines idx))
-       (not (let ([md (metadata-bounds lines)])
-              (and md (< (car md) idx) (<= idx (cdr md)))))
+  (and (fillable? lines idx)
        (let* ([depth (quote-depth (line idx))]
               [top
                (let loop ([i idx])

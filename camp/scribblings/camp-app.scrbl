@@ -92,7 +92,12 @@ file. The editor provides:
  set in @onscreen{Preferences…} (like Vim's @tt{gqip}), and it is Markdown-aware: a bulleted or
  numbered list item is wrapped by itself, keeping its marker and giving continuation lines a
  hanging indent; blockquoted text keeps its @tt{>} prefix on every line; and headings, code
- fences and their contents, tables, and the metadata block are left alone.}
+ fences and their contents, tables, and the metadata block are left alone. The same rules apply as
+ you type: when a typed character carries the current line past the wrap column, that line (and
+ only that line) is broken where @kbd{⌘}@kbd{J} would break it, like Emacs's
+ @tt{auto-fill-mode}. The window's soft wrap is measured in pixels, so in a proportional font it
+ cannot stand in for a character count. Turn this off with @onscreen{Break lines at the wrap column
+ while typing} in @onscreen{Preferences…}.}
 
  @item{A centered text block, as in iA Writer: the margins grow as the window widens, and never
  shrink below a comfortable minimum.}

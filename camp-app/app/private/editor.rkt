@@ -26,7 +26,7 @@
          camp/app/private/fonts
          camp/app/private/gui
          (only-in camp/app/private/settings
-                  @vim-mode @fill-column @line-numbers? @editor-geometry))
+                  @vim-mode @fill-column @auto-fill? @line-numbers? @editor-geometry))
 
 (provide open-editor!)
 
@@ -119,9 +119,10 @@
              delete insert set-position begin-edit-sequence end-edit-sequence)
     (define/private (status! msg)
       (send (get-top-level-window) set-vim-status-message msg))
+    (define/private (buffer-lines)
+      (list->vector (regexp-split #rx"\n" (get-text))))
     (define/public (fill-paragraph!)
-      (define lines (list->vector (regexp-split #rx"\n" (get-text))))
-      (define result (fill-unit lines
+      (define result (fill-unit (buffer-lines)
                                 (position-paragraph (get-start-position))
                                 (obs-peek @fill-column)))
       (cond
@@ -140,7 +141,32 @@
             (delete start end)
             (insert filled start)
             (end-edit-sequence)])
-         (set-position (+ start (string-length filled)))]))))
+         (set-position (+ start (string-length filled)))]))
+
+    ;; Auto-fill: text% soft-wraps by pixel width, so only a hard break as a
+    ;; typed character overflows the column agrees with fill-paragraph!
+    (define/private (auto-fill!)
+      (define para (position-paragraph (get-start-position)))
+      (define start (paragraph-start-position para))
+      (define width (obs-peek @fill-column))
+      (define edits
+        (if (> (- (paragraph-end-position para) start) width)
+            (auto-fill-edits (buffer-lines) para width)
+            '()))
+      (unless (null? edits)
+        (begin-edit-sequence)
+        (for ([e (in-list edits)])
+          (insert (third e) (+ start (first e)) (+ start (second e))))
+        (end-edit-sequence)))
+    (define/override (on-local-char e)
+      (super on-local-char e)
+      (define k (send e get-key-code))
+      (when (and (obs-peek @auto-fill?)
+                 (char? k)
+                 (or (char-graphic? k) (char=? k #\space))
+                 (not (send e get-meta-down))
+                 (not (send e get-control-down)))
+        (auto-fill!)))))
 
 ;; The text block is centered, iA Writer style: the left padding is whatever
 ;; centers a wrap-column-wide block in the view, never less than min-margin,

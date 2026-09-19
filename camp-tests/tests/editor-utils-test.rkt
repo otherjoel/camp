@@ -2,7 +2,8 @@
 
 ;; Tests for the in-app editor's pure helpers
 
-(require rackunit
+(require racket/list
+         rackunit
          rackunit/text-ui
          camp/app/private/editor-utils)
 
@@ -119,7 +120,37 @@
    (test-case "fill-unit refuses the top metadata block but not the body"
      (define doc (vector "#lang punct" "" "---" "title: aaa bbb ccc ddd" "---" "" "body text"))
      (check-false (fill-unit doc 3 10))
-     (check-equal? (fill-unit doc 6 80) (list 6 6 "body text")))))
+     (check-equal? (fill-unit doc 6 80) (list 6 6 "body text")))
+
+   (test-case "auto-fill-edits breaks an overlong line where fill-unit would"
+     (for ([l (in-list '("aaa bbb ccc ddd" "- aaa bbb ccc ddd" "12. aaa bbb ccc"
+                         "  aaa bbb ccc" "> aaa bbb ccc" "> - aaa bbb ccc"
+                         "aa indivisible bb"))])
+       (check-equal? (apply-edits l (auto-fill-edits (vector l) 0 9))
+                     (third (fill-unit (vector l) 0 9))
+                     l)))
+
+   (test-case "auto-fill-edits lists whitespace runs rightmost first"
+     (check-equal? (auto-fill-edits (vector "> aaa bbb  ccc") 0 5)
+                   '((9 11 "\n> ") (5 6 "\n> "))))
+
+   (test-case "auto-fill-edits leaves lines that fit, and trailing space, alone"
+     (check-equal? (auto-fill-edits (vector "aaa bbb") 0 7) '())
+     (check-equal? (auto-fill-edits (vector "aaa bbb ") 0 7) '())
+     (check-equal? (auto-fill-edits (vector "indivisible") 0 5) '()))
+
+   (test-case "auto-fill-edits touches only the given line"
+     (check-equal? (auto-fill-edits (vector "aaa bbb ccc" "ddd") 0 7) '((7 8 "\n")))
+     (check-equal? (auto-fill-edits (vector "- aaa" "  bbb ccc ddd") 1 9) '((9 10 "\n  "))))
+
+   (test-case "auto-fill-edits refuses what fill-unit refuses"
+     (check-equal? (auto-fill-edits (vector "# Heading aaa bbb ccc") 0 10) '())
+     (check-equal? (auto-fill-edits (vector "```" "(code aaa bbb ccc ddd)" "```") 1 10) '())
+     (check-equal? (auto-fill-edits (vector "---" "title: aaa bbb ccc" "---") 1 10) '()))))
+
+(define (apply-edits l edits)
+  (for/fold ([l l]) ([e (in-list edits)])
+    (string-append (substring l 0 (first e)) (third e) (substring l (second e)))))
 
 (module+ main
   (run-tests editor-utils-tests))
