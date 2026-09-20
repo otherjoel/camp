@@ -144,9 +144,12 @@
          (set-position (+ start (string-length filled)))]))
 
     ;; Auto-fill: text% soft-wraps by pixel width, so only a hard break as a
-    ;; typed character overflows the column agrees with fill-paragraph!
+    ;; typed character overflows the column agrees with fill-paragraph! An
+    ;; insert at the caret would push the caret past it, so the caret is placed;
+    ;; a space never fills, so the caret is never inside a run that a break eats.
     (define/private (auto-fill!)
-      (define para (position-paragraph (get-start-position)))
+      (define caret (get-start-position))
+      (define para (position-paragraph caret))
       (define start (paragraph-start-position para))
       (define width (obs-peek @fill-column))
       (define edits
@@ -157,13 +160,14 @@
         (begin-edit-sequence)
         (for ([e (in-list edits)])
           (insert (third e) (+ start (first e)) (+ start (second e))))
+        (set-position (+ start (position-after-edits (- caret start) edits)))
         (end-edit-sequence)))
     (define/override (on-local-char e)
       (super on-local-char e)
       (define k (send e get-key-code))
       (when (and (obs-peek @auto-fill?)
                  (char? k)
-                 (or (char-graphic? k) (char=? k #\space))
+                 (char-graphic? k)
                  (not (send e get-meta-down))
                  (not (send e get-control-down)))
         (auto-fill!)))))

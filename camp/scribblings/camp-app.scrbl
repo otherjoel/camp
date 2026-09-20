@@ -96,9 +96,12 @@ file. The editor provides:
  numbered list item is wrapped by itself, keeping its marker and giving continuation lines a
  hanging indent; blockquoted text keeps its @tt{>} prefix on every line; and headings, code
  fences and their contents, tables, and the metadata block are left alone. The same rules apply as
- you type: when a typed character carries the current line past the wrap column, that line (and
- only that line) is broken where @kbd{⌘}@kbd{J} would break it, like Emacs's
- @tt{auto-fill-mode}. The window's soft wrap is measured in pixels, so in a proportional font it
+ you type: when a typed character carries the current line past the wrap column, that line is
+ broken where @kbd{⌘}@kbd{J} would break it, and the words that overflow move to the start of the
+ paragraph's next line, which passes its own overflow down in turn until a line fits. Lines are
+ never joined upward, and a line that ends in a Markdown hard break (two spaces or a backslash)
+ keeps its overflow on a line of its own; use @kbd{⌘}@kbd{J} to close up a paragraph after
+ deleting from it. The window's soft wrap is measured in pixels, so in a proportional font it
  cannot stand in for a character count. Turn this off with @onscreen{Break lines at the wrap column
  while typing} in @onscreen{Preferences…}.}
 
