@@ -83,11 +83,15 @@
   (define ctx (build-context pg
                              (page-collection-name pg)
                              (site-info-taxonomy-index info)))
-  (parameterize ([current-site-info info])
+  (parameterize ([current-site-info info]
+                 [current-output-dir (site-output-dir site)])
     (proc (page-doc pg) ctx)))
 
 ;; ---------------------------------------------------------------------------
 ;; Output Path Helpers
+
+(define (site-output-dir site)
+  (build-path (site-root site) (site-output-folder site)))
 
 (define (normalize-output-path path-str)
   (define without-leading
@@ -334,9 +338,10 @@
 ;; Build Pass
 
 (define (build! site info)
-  (parameterize ([current-site-info info])
+  (define output-dir (site-output-dir site))
+  (parameterize ([current-site-info info]
+                 [current-output-dir output-dir])
     (define root-dir (site-root site))
-    (define output-dir (build-path root-dir (site-output-folder site)))
     (define static-dir (build-path root-dir (site-static-folder site)))
     (define collections (site-collections site))
     (define taxonomy-index (site-info-taxonomy-index info))

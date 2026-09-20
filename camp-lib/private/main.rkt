@@ -20,6 +20,7 @@
          load-site
          filter-pages
          current-site-info
+         current-output-dir
          get-collection
          get-taxonomy-terms
          get-taxonomy-pages
@@ -33,9 +34,10 @@
          pagination-nav)
 
 ;; ---------------------------------------------------------------------------
-;; Site-Info Parameter
+;; Build Parameters
 
 (define current-site-info (make-parameter #f))
+(define current-output-dir (make-parameter #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Site Resolution

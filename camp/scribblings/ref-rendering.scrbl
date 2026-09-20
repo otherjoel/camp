@@ -4,6 +4,7 @@
           hash-view/scribble
           (for-label (except-in racket/base date date?)
                      camp
+                     camp/build
                      gregor
                      punct/doc))
 
@@ -192,6 +193,33 @@ This function is useful for building custom page sets or for book parts that fil
 
 Taxonomy values in page metadata can be comma-separated strings or lists; both formats are
 normalized before matching.}
+
+@section[#:tag "ref-output-files"]{Additional Output Files}
+
+@defparam[current-output-dir dir (or/c path? #f)]{
+A parameter containing the complete path of the site's output folder. Set by @racket[build!] and
+@racket[collect/call-with-page] for the duration of the render; @racket[#f] otherwise.
+
+Render functions can use this to write files that accompany a page, such as generated images.
+A build leaves such files in place, with two exceptions: @filepath{.html} files that the build did
+not itself produce are deleted at the end of each build, and a clean build empties the whole output
+folder first. Files that are expensive to produce are best kept in a cache folder elsewhere and
+copied into place when missing:
+
+@codeblock|{
+(define-runtime-path card-cache "card-cache")
+
+(define (ensure-card! doc ctx)
+  (define name (~a (context-slug ctx) ".png"))
+  (define cached (build-path card-cache name))
+  (define published (build-path (current-output-dir) "cards" name))
+  (unless (file-exists? cached)
+    (make-parent-directory* cached)
+    (draw-card! doc cached))
+  (unless (file-exists? published)
+    (make-parent-directory* published)
+    (copy-file cached published)))
+}|}
 
 @section[#:tag "ref-date-formatting"]{Date Formatting}
 

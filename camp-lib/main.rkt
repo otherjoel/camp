@@ -32,6 +32,7 @@
  output-path-pattern?
  file-extension?
  non-rkt-file-extension?
+ current-output-dir
  ;; HTML rendering
  camp-doc->html-xexpr
  ;; Typst rendering
