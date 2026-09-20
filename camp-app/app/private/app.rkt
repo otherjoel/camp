@@ -788,11 +788,11 @@
      (button "Add" add-by-path)
      (button "Cancel" close!)))))
 
-(define (editor-display-name path)
-  (cond
-    [(or (not path) (and (string? path) (string=? path ""))) "Built-in editor"]
-    [(path? path) (path->string (file-name-from-path path))]
-    [else (let ([p (string->path path)]) (path->string (file-name-from-path p)))]))
+(define (external-editor-label app)
+  (if (non-empty-string? app)
+      (format "External editor (~a)"
+              (regexp-replace #rx"[.]app$" (path->string (file-name-from-path app)) ""))
+      "External editor"))
 
 (define (choose-editor!)
   (define default-dir
@@ -800,18 +800,36 @@
          (string->path "/Applications/")))
   (define path (get-file "Choose editor" (get-main-frame) default-dir))
   (when path
+    (@external-editor . := . (path->string path))
     (@editor . := . (path->string path))))
 
+(define (use-external-editor!)
+  (define app (obs-peek @external-editor))
+  (cond
+    [(non-empty-string? app) (@editor . := . app)]
+    [else (choose-editor!)
+          ;; a cancelled chooser leaves the radio clicked; renotify to clear it
+          (@editor . <~ . values)]))
+
 ;; HIG two-column form: right-aligned label column, left-aligned controls
-(define (pref-row label #:top? [top? #f] . controls)
+;; #:top-inset pins the label to the top of a tall control, dropped far
+;; enough to sit level with that control's first line.
+(define ((make-pref-row label-width) label #:top-inset [inset #f] . controls)
   (hpanel
    #:stretch '(#t #f)
-   #:spacing 10
-   (hpanel #:min-size '(130 #f)
+   #:spacing 6
+   #:alignment (list 'left (if inset 'top 'center))
+   (hpanel #:min-size (list label-width #f)
+           #:margin (list 0 (or inset 0))
            #:stretch '(#f #f)
-           #:alignment (list 'right (if top? 'top 'center))
+           #:alignment '(right center)
            (text label))
-   (apply hpanel #:spacing 8 #:alignment '(left center) controls)))
+   (apply hpanel #:spacing 4 #:alignment '(left center) controls)))
+
+;; Rows inside the group box give up its inset, so every colon lines up
+(define pref-group-inset 8)
+(define pref-row (make-pref-row (+ 94 pref-group-inset)))
+(define group-pref-row (make-pref-row 94))
 
 (define pref-caption-color (make-color 120 120 120))
 
@@ -819,7 +837,9 @@
   (text s #:font small-control-font #:color pref-caption-color))
 
 (define (pref-group-gap)
-  (hpanel #:min-size '(#f 10) #:stretch '(#t #f)))
+  (hpanel #:min-size '(#f 8) #:stretch '(#t #f)))
+
+(define pref-wide-control 240)
 
 (define (change-font-slot! idx)
   (define f (choose-font (get-main-frame) (slot-font idx)))
@@ -829,15 +849,31 @@
     (define size (exact-round (send f get-size)))
     (@font-slots . <~ . (λ (slots) (list-set slots idx (list face size))))))
 
-(define (font-slot-controls idx)
-  (list
-   (hpanel #:min-size '(16 #f) #:stretch '(#f #f)
-           (text (obs-map @font-slot (λ (active) (if (= active idx) "●" "")))))
-   (hpanel #:min-size '(210 #f) #:stretch '(#f #f) #:alignment '(left center)
-           (text (obs-map @font-slots
-                          (λ (slots) (font-slot-label idx (list-ref slots idx))))))
-   (button "Change…" (λ () (change-font-slot! idx)))
-   (button "Activate" (λ () (@font-slot . := . idx)))))
+;; A radio-box% fixes its labels at creation and lays out only its own items.
+;; Each option is therefore a one-item group: rebuilt when its label changes,
+;; and free to share a row with other controls.
+(define (solo-radio label @selected? select!)
+  (observable-view
+   (@ label)
+   (λ (label)
+     (radios '(#t)
+             (λ (on?) (when on? (select!)))
+             #:choice->label (λ (_) label)
+             #:selection @selected?
+             ;; radio-box% selects its first item unless told otherwise
+             #:mixin (λ (%) (class % (super-new [selection #f])))))))
+
+;; The stretchy panel pushes every row's button to the same right edge
+(define (font-slot-row idx)
+  (hpanel
+   #:alignment '(left center)
+   (hpanel
+    #:min-size '(200 #f)
+    #:alignment '(left center)
+    (solo-radio (obs-map @font-slots (λ (slots) (font-slot-label idx (list-ref slots idx))))
+                (obs-map @font-slot (λ (active) (= active idx)))
+                (λ () (@font-slot . := . idx))))
+   (button "Change…" (λ () (change-font-slot! idx)) #:margin '(2 0))))
 
 (define (scheme-display-name v)
   (match v
@@ -882,47 +918,15 @@
 
 (define (?prefs)
   (define-values (close! closing-mixin) (make-mix-close))
-  (define @editor-label (obs-map @editor editor-display-name))
+  (define @camp-editor? (obs-map @editor use-internal-editor?))
   (define/obs @scheme-selection #f)
   (dialog
    #:title "Preferences"
-   #:min-size '(680 #f)
    #:mixin closing-mixin
    (vpanel
-    #:margin '(20 20)
-    #:spacing 6
+    #:margin '(20 16)
+    #:spacing 2
     #:alignment '(left top)
-    (pref-row "Editor:"
-              (text @editor-label)
-              (button "Choose External…" (λ () (choose-editor!)))
-              (button "Use Built-in" (λ () (@editor . := . ""))))
-    (pref-row "Options:"
-              (checkbox (λ (on?) (@vim-mode . := . (and on? #t)))
-                        #:label "Vim keybindings"
-                        #:checked? @vim-mode))
-    (pref-row ""
-              (checkbox (λ (on?) (@line-numbers? . := . (and on? #t)))
-                        #:label "Show line numbers"
-                        #:checked? @line-numbers?))
-    (pref-row "Wrap column:"
-              (input (obs-map @fill-column number->string)
-                     (λ (_action s)
-                       (define n (string->number s))
-                       (when (exact-positive-integer? n)
-                         (@fill-column . := . n)))
-                     #:min-size '(64 #f)
-                     #:stretch '(#f #f))
-              (pref-caption "⌘J re-wraps the current paragraph"))
-    (pref-row ""
-              (checkbox (λ (on?) (@auto-fill? . := . (and on? #t)))
-                        #:label "Break lines at the wrap column while typing"
-                        #:checked? @auto-fill?))
-    (pref-group-gap)
-    (apply pref-row "Editor font:" (font-slot-controls 0))
-    (apply pref-row "" (font-slot-controls 1))
-    (apply pref-row "" (font-slot-controls 2))
-    (pref-row "" (pref-caption "⇧⌘F switches to the next font slot"))
-    (pref-group-gap)
     (pref-row "Appearance:"
               (choice '(light dark system)
                       (λ (m) (when m (@appearance-mode . := . m)))
@@ -930,36 +934,89 @@
                       #:choice->label (λ (m) (case m
                                                [(light) "Light"]
                                                [(dark) "Dark"]
-                                               [else "Follow system"]))
-                      #:min-size '(200 #f)))
-    (pref-row "Light scheme:"
-              (choice (scheme-choices #f)
-                      (λ (v) (when v (@light-scheme . := . v)))
-                      #:selection @light-scheme
-                      #:choice->label scheme-display-name
-                      #:min-size '(280 #f)))
-    (pref-row "Dark scheme:"
-              (choice (scheme-choices #t)
-                      (λ (v) (when v (@dark-scheme . := . v)))
-                      #:selection @dark-scheme
-                      #:choice->label scheme-display-name
-                      #:min-size '(280 #f)))
-    (pref-row "Themes:" #:top? #t
-              (vpanel
-               #:spacing 8
-               #:alignment '(left top)
-               (table '("Installed themes" "Mode")
-                      (obs-map @color-schemes list->vector)
-                      (λ (_evt entries idx)
-                        (@scheme-selection . := . (and idx (vector-ref entries idx))))
-                      #:entry->row (λ (s) (vector (scheme-name s)
-                                                  (if (scheme-dark? s) "dark" "light")))
-                      #:min-size '(#f 140))
-               (hpanel
-                #:spacing 8
-                #:stretch '(#t #f)
-                (button "Import Theme…" (λ () (import-scheme!)))
-                (button "Remove" (λ () (remove-scheme! (obs-peek @scheme-selection)))))))
+                                               [else "Follow System"]))
+                      #:min-size (list pref-wide-control #f)))
+    (pref-group-gap)
+    (pref-row "Editor:"
+              (solo-radio "Camp Editor" @camp-editor? (λ () (@editor . := . ""))))
+    (pref-row ""
+              (solo-radio (obs-map @external-editor external-editor-label)
+                          (obs-map @camp-editor? not)
+                          use-external-editor!)
+              (button "Choose Editor App…" choose-editor!))
+    (pref-group-gap)
+    (group
+     "Camp Editor"
+     #:stretch '(#t #f)
+     (vpanel
+      #:margin '(0 6)
+      #:spacing 2
+      #:alignment '(left top)
+      (group-pref-row "Options:"
+                      (checkbox (λ (on?) (@vim-mode . := . (and on? #t)))
+                                #:label "Vim keybindings"
+                                #:checked? @vim-mode))
+      (group-pref-row ""
+                      (checkbox (λ (on?) (@line-numbers? . := . (and on? #t)))
+                                #:label "Show line numbers"
+                                #:checked? @line-numbers?))
+      (group-pref-row ""
+                      (checkbox (λ (on?) (@auto-fill? . := . (and on? #t)))
+                                #:label "Break lines at the wrap column while typing"
+                                #:checked? @auto-fill?))
+      (group-pref-row "Wrap column:"
+                      (input (obs-map @fill-column number->string)
+                             (λ (_action s)
+                               (define n (string->number s))
+                               (when (exact-positive-integer? n)
+                                 (@fill-column . := . n)))
+                             #:min-size '(56 #f)
+                             #:stretch '(#f #f))
+                      (pref-caption "⌘J re-wraps the current paragraph"))
+      (pref-group-gap)
+      (group-pref-row "Editor font:" #:top-inset 7
+                      (vpanel
+                       #:stretch '(#f #f)
+                       #:alignment '(left top)
+                       (font-slot-row 0)
+                       (font-slot-row 1)
+                       (font-slot-row 2)
+                       (pref-caption "⇧⌘F switches to the next font")))
+      (pref-group-gap)
+      (group-pref-row "Light scheme:"
+                      (choice (scheme-choices #f)
+                              (λ (v) (when v (@light-scheme . := . v)))
+                              #:selection @light-scheme
+                              #:choice->label scheme-display-name
+                              #:min-size (list pref-wide-control #f)))
+      (group-pref-row "Dark scheme:"
+                      (choice (scheme-choices #t)
+                              (λ (v) (when v (@dark-scheme . := . v)))
+                              #:selection @dark-scheme
+                              #:choice->label scheme-display-name
+                              #:min-size (list pref-wide-control #f)))
+      (group-pref-row "Themes:" #:top-inset 4
+                      (vpanel
+                       #:stretch '(#f #f)
+                       #:alignment '(left top)
+                       (table '("Name" "Mode")
+                              (obs-map @color-schemes list->vector)
+                              (λ (_evt entries idx)
+                                (@scheme-selection . := . (and idx (vector-ref entries idx))))
+                              #:entry->row (λ (s) (vector (scheme-name s)
+                                                          (if (scheme-dark? s) "Dark" "Light")))
+                              #:column-widths '((0 150) (1 66))
+                              #:margin '(2 2)
+                              #:min-size (list pref-wide-control 106)
+                              #:stretch '(#f #f))
+                       (hpanel
+                        (button "Import Theme…" (λ () (import-scheme!)))
+                        (button "Remove"
+                                (λ ()
+                                  (remove-scheme! (obs-peek @scheme-selection))
+                                  (@scheme-selection . := . #f))
+                                #:enabled? (obs-map @scheme-selection (λ (s) (and s #t)))))
+                       (pref-caption "Imports TextMate (.tmTheme) and VS Code (.json) themes")))))
     (pref-group-gap)
     (hpanel
      #:stretch '(#t #f)
