@@ -822,7 +822,7 @@
   (hpanel #:min-size '(#f 10) #:stretch '(#t #f)))
 
 (define (change-font-slot! idx)
-  (define f (get-font-from-user "Slot font" (get-main-frame) (slot-font idx)))
+  (define f (choose-font (get-main-frame) (slot-font idx)))
   (when f
     (define face (or (send f get-face)
                      (get-family-builtin-face (send f get-family))))
