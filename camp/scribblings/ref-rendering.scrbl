@@ -169,8 +169,9 @@ Filters a list of page-links by date range and/or taxonomy values. All filters a
 AND logic---pages must pass all specified filters to be included.
 
 @itemlist[
-  @item{@racket[#:date-from] and @racket[#:date-to]: Inclusive date bounds. Pages without a date
-        (or with unparseable dates) are excluded when date filtering is active.}
+  @item{@racket[#:date-from] and @racket[#:date-to]: Inclusive date bounds, compared by calendar
+        date only. Pages without a date are excluded when date filtering is active, and an
+        unparseable date raises an exception (see @secref["ref-site-dates"]).}
   @item{@racket[#:date-key]: The metadata key to use for date comparison (default: @racket['date]).}
   @item{@racket[#:taxonomies]: A hash where keys are taxonomy names (strings or symbols) and values
         are either a single string (exact match) or a list of strings (match any).}]
@@ -253,7 +254,7 @@ See the @hyperlink["http://unicode.org/reports/tr35/tr35-dates.html#Date_Field_S
 documentation} for the complete list of pattern symbols.}
 
 @defproc[(~d [pattern string?] [v (or/c string? date-provider?)]) string?]{
-Formats a date using CLDR patterns, automatically converting ISO 8601 date strings. This is the
+Formats a date using CLDR patterns, automatically converting date strings. This is the
 recommended function for formatting dates from page metadata, since Punct documents provide dates
 as strings. The pattern comes first, matching Racket's @racket[format] convention.
 
@@ -263,9 +264,11 @@ as strings. The pattern comes first, matching Racket's @racket[format] conventio
 
 (~d "d MMM yyyy" date)      ; "15 Jan 2025" - works either way
 (~d "yyyy-MM-dd" date)      ; "2025-01-15" - for datetime attributes
+(~d "h:mm a" "2025-01-15T09:30")  ; "9:30 AM"
 }|
 
 If @racket[_v] is already a @racket[date-provider?], it is passed directly to @racket[~t]. If
-@racket[_v] is a string, it is first parsed as an ISO 8601 date.}
+@racket[_v] is a string, it is first parsed as a @racket[moment] in the same way as @tt{date}
+metadata (see @secref["ref-site-dates"]).}
 
 

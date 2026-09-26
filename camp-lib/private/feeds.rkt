@@ -10,6 +10,7 @@
          racket/file
          gregor
          splitflap
+         "dates.rkt"
          "structs.rkt"
          "main.rkt"
          "log.rkt")
@@ -66,7 +67,7 @@
         relative-url))
   (define absolute-url (url-join site-url relative-for-join))
   (define item-tag-uri (append-specific feed-tag-uri (normalize-tag-specific slug)))
-  (define pub-moment (date-string->moment date-val))
+  (define pub-moment (meta->moment date-val))
   (define content (get-feed-content slug render-fn contexts-by-slug))
 
   (feed-item item-tag-uri
@@ -76,13 +77,6 @@
              pub-moment
              pub-moment
              content))
-
-(define (date-string->moment date-val)
-  (cond
-    [(moment? date-val) date-val]
-    [(date? date-val) (infer-moment (date->iso8601 date-val))]
-    [(string? date-val) (infer-moment date-val)]
-    [else (infer-moment)]))
 
 (define (get-feed-content slug render-fn contexts-by-slug)
   (define info (current-site-info))

@@ -35,6 +35,7 @@
    [racket-collection #:default #f]   ; package collection name, set by load-site
    [deploy-script #:default #f]
    [default-render #:default #f]
+   [timezone #:default #f]
    [feeds #:default '()]))
 
 (hash-view collection

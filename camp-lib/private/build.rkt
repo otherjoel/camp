@@ -15,6 +15,7 @@
          html-printer
          "structs.rkt"
          "collections.rkt"
+         "dates.rkt"
          "filter.rkt"
          "path-map.rkt"
          "log.rkt"
@@ -39,9 +40,10 @@
   (define collections (site-collections site))
 
   (define all-pages
-    (for/fold ([pages '()])
-              ([coll (in-list collections)])
-      (append pages (collect-collection root-dir source-ext coll))))
+    (parameterize ([current-site-timezone (site-timezone site)])
+      (for/fold ([pages '()])
+                ([coll (in-list collections)])
+        (append pages (collect-collection root-dir source-ext coll)))))
 
   (define page-index (build-page-index all-pages))
   (define term-index (build-term-index all-pages))
@@ -84,7 +86,8 @@
                              (page-collection-name pg)
                              (site-info-taxonomy-index info)))
   (parameterize ([current-site-info info]
-                 [current-output-dir (site-output-dir site)])
+                 [current-output-dir (site-output-dir site)]
+                 [current-site-timezone (site-timezone site)])
     (proc (page-doc pg) ctx)))
 
 ;; ---------------------------------------------------------------------------
@@ -148,11 +151,7 @@
 
 (define (get-page-date doc)
   (define raw-date (meta-ref doc 'date))
-  (cond
-    [(not raw-date) #f]
-    [(date-provider? raw-date) raw-date]
-    [(string? raw-date) (iso8601->date raw-date)]
-    [else #f]))
+  (and raw-date (meta->moment raw-date)))
 
 ;; ---------------------------------------------------------------------------
 ;; Page Index
@@ -340,7 +339,8 @@
 (define (build! site info)
   (define output-dir (site-output-dir site))
   (parameterize ([current-site-info info]
-                 [current-output-dir output-dir])
+                 [current-output-dir output-dir]
+                 [current-site-timezone (site-timezone site)])
     (define root-dir (site-root site))
     (define static-dir (build-path root-dir (site-static-folder site)))
     (define collections (site-collections site))

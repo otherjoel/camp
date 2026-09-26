@@ -9,6 +9,7 @@
          punct/fetch
          punct/doc
          gregor
+         "dates.rkt"
          "structs.rkt")
 
 (provide source-pattern->directory
@@ -118,10 +119,7 @@
 ;; Page Sorting
 
 (define (parse-sort-value val sort-key)
-  (cond
-    [(date? val) val]
-    [(and (equal? sort-key "date") (string? val)) (iso8601->date val)]
-    [else val]))
+  (if (equal? sort-key "date") (meta->moment val) val))
 
 (define (sort-pages pages coll)
   (define sort-key (collection-sort-key coll))
@@ -144,6 +142,7 @@
   (define (compare-values a b)
     (define (less-than? x y)
       (cond
+        [(and (moment? x) (moment? y)) (moment<? x y)]
         [(and (date? x) (date? y)) (date<? x y)]
         [(and (string? x) (string? y)) (string<? x y)]
         [(and (number? x) (number? y)) (< x y)]

@@ -113,7 +113,39 @@ render-with = "(camp-demo/feeds feed-content)" # same as default-render
                (list @racket[static-folder] @racket[path-string?] @racket["static"] "Static assets directory")
                (list @racket[output-folder] @racket[path-string?] @racket["publish"] @nonbreaking{Build output directory})
                (list @racket[deploy-script] @racket[path-string?] @racket[#f] @nonbreaking{Deployment script path})
-               (list @nonbreaking[@racket[default-render]] @racket[render-spec?] @racket[#f] @nonbreaking{Default render function}))]
+               (list @nonbreaking[@racket[default-render]] @racket[render-spec?] @racket[#f] @nonbreaking{Default render function})
+               (list @racket[timezone] @racket[timezone-name?] @racket[#f] @nonbreaking{Time zone for dates (see @secref["ref-site-dates"])}))]
+
+@defproc[(timezone-name? [v any/c]) boolean?]{
+
+ Returns @racket[#t] if @racket[_v] is a string naming a time zone in the IANA time zone database.
+
+@examples[
+ #:eval e
+ (timezone-name? "America/Chicago")
+ (timezone-name? "Etc/UTC")
+ (timezone-name? "Central")]
+
+}
+
+@subsection[#:tag "ref-site-dates"]{Dates and time zones}
+
+Camp reads the @tt{date} metadata of each page as a @racket[moment]. The value can be a string in
+any format accepted by @racket[infer-moment]: a date such as @racket["2025-01-15"], optionally
+followed by a time (after @litchar{T} or a space) and a UTC offset, as in
+@racket["2025-01-15T09:30"] or @racket["2025-01-15 09:30-05:00"]. It can also be a gregor
+@racket[date], @racket[datetime] or @racket[moment]. Any other value, including an empty string,
+raises an exception when the site is collected.
+
+A date without a time is taken to be the start of that day. If the site has no @racket[timezone]
+setting, dates without an offset are in @racket[current-timezone] (normally the time zone of the
+computer building the site), and dates with an offset keep it.
+
+If the site sets @racket[timezone], dates without an offset are in that time zone, and dates with an
+offset are converted to it. A converted date refers to the same instant (it is @racket[moment=?] to
+the original), but its date and time fields may change: @racket["2025-01-15T23:30-08:00"] on a site
+with @racket[timezone] set to @racket["Etc/UTC"] falls on January 16 in output paths and
+@racket[~d].
 
 @section[#:tag "ref-site-collections"]{Collections}
 
@@ -302,6 +334,7 @@ information on hash-views, see @other-doc['(lib "hash-view/hash-view.scrbl")].
                    [racket-collection (or/c string? #f) #:default #f]
                    [deploy-script (or/c string? #f) #:default #f]
                    [default-render (or/c list? #f) #:default #f]
+                   [timezone (or/c timezone-name? #f) #:default #f]
                    [feeds (listof feed-config?) #:default '()])]{
 
 A @tech{hash-view} representing a @tech{site} configuration. A site is most commonly defined using
