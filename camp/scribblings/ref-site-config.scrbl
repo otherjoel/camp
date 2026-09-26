@@ -210,6 +210,17 @@ render functions:
 The @racket[ctxt] argument is a @racket[context] whch provides access to the page's canonical URL,
 enabling feed content to include links back to the original page on your site.
 
+Every page in the feed's collections becomes an entry, except drafts and pages without a @tt{date}.
+The page's @tt{date} is the entry's publication time. A page can also have an @tt{updated} value, in
+any format accepted for @tt{date} (see @secref["ref-site-dates"]); it becomes the entry's update time,
+which is otherwise the same as its @tt{date}. An @tt{updated} value earlier than the @tt{date} raises
+an exception.
+
+Entries are ordered by update time, most recent first, and the most recent update time is also the
+update time of the feed itself. Adding or changing @tt{updated} on an older page therefore moves it
+to the top of the feed. RSS items have only a publication date, so in RSS feeds @tt{updated} affects
+only the order of items and the feed's @tt{lastBuildDate}.
+
 @defproc[(feed-filename? [v any/c]) boolean?]{
                                               
  Returns @racket[#t] if @racket[_v] is a string ending in @filepath{.atom} or @filepath{.rss}.
