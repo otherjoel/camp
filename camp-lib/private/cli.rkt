@@ -7,6 +7,7 @@
          racket/file
          racket/format
          racket/list
+         racket/lazy-require
          racket/logging
          racket/match
          racket/path
@@ -18,13 +19,15 @@
          "main.rkt"
          "build.rkt"
          "book-build.rkt"
-         "serve.rkt"
          "watch.rkt"
          "structs.rkt"
          "draft.rkt"
          (only-in "output.rkt" format-duration with-timing count-files-in-directory)
          "log.rkt"
          "new-site.rkt")
+
+;; The web server is loaded only by the serve command
+(lazy-require ["serve.rkt" (start-server)])
 
 (provide main)
 

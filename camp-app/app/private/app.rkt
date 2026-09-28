@@ -3,7 +3,6 @@
 ;; Camp App - Main application window and logic
 
 (require camp/build
-         camp/serve
          (only-in camp/private/build sync-static-files output-path->url)
          (only-in camp/private/xref normalize-slug)
          (only-in camp/private/watch start-watcher! get-watch-paths path-change-type)
@@ -14,6 +13,7 @@
          racket/gui
          racket/gui/easy
          racket/gui/easy/operator
+         racket/lazy-require
          racket/list
          racket/match
          racket/math
@@ -26,15 +26,21 @@
          setup/getinfo
          camp/app/private/settings
          camp/app/private/gui
-         (only-in camp/app/private/appearance init-appearance!)
-         camp/app/private/editor
+         camp/app/private/app-appearance
          (only-in camp/app/private/editor-utils use-internal-editor? font-slot-label)
-         camp/app/private/fonts
          (only-in camp/app/private/theme import-theme-file scheme-name scheme-dark?)
          camp/app/private/site-utils
          camp/app/private/subprocess-env)
 
 (provide run-app)
+
+;; The main window needs neither the web server nor framework, which the
+;; editor, its fonts and its color schemes build on; together they take as
+;; long to load as everything else, so they load only once the window is up
+(lazy-require [camp/serve (start-server)]
+              [camp/app/private/appearance (init-appearance!)]
+              [camp/app/private/fonts (apply-active-font-slot! slot-font)]
+              [camp/app/private/editor (open-editor!)])
 
 ;; The app reloads site modules in-process for its lifetime, so site
 ;; bytecode must be cleared as sites load (see camp/private/rerequire)
@@ -106,7 +112,7 @@
             #f]
            [else (load-site path)]))))
 
-(define/obs @site (load-site-from-spec (obs-peek @site-selection)))
+(define/obs @site #f)
 (obs-observe! @site-selection (λ (spec) (@site . := . (load-site-from-spec spec))))
 
 (define @site-root (obs-map @site (λ (s) (and s (site-root s)))))
@@ -142,6 +148,24 @@
 
 (define (build-site-async!)
   (void (thread build-site!)))
+
+;; The selected site loads after the main window appears; until its pages
+;; are listed, the controls that would switch sites stay disabled
+(define/obs @loading? (and (obs-peek @site-selection) #t))
+
+(define (load-selected-site!)
+  (define spec (obs-peek @site-selection))
+  (when spec
+    (log-msg "Loading ~a…" (site-spec->display-name spec))
+    (dynamic-wind
+     void
+     (λ ()
+       (@site . := . (load-site-from-spec spec))
+       (@folder-selection . := . (vec-ref? (obs-peek @folders) 0)))
+     (λ () (@loading? . := . #f)))
+    (build-site!)))
+
+(define @switching-enabled? (obs-map @loading? not))
 
 ;; For watcher-triggered config reloads: unlike load-site-from-spec, a config
 ;; error (e.g. a half-saved edit) keeps the previous site instead of removing
@@ -255,6 +279,7 @@
           #:selection @site-selection
           #:choice->label site-spec->display-name
           #:label "Sites"
+          #:enabled? @switching-enabled?
           #:stretch '(#t #f)))
 
 ;; ============================================================================
@@ -289,9 +314,11 @@
       (trigger-refresh!)))
 
 (define (edit-source p)
-  (if (use-internal-editor? (obs-peek @editor))
-      (open-editor! p #:on-save handle-editor-save!)
-      (edit-source/external p)))
+  (cond
+    [(use-internal-editor? (obs-peek @editor))
+     (force editor-support)
+     (open-editor! p #:on-save handle-editor-save!)]
+    [else (edit-source/external p)]))
 
 (define (edit-source/external p)
   (thread
@@ -612,8 +639,8 @@
     (menu-item "Build" (λ () (thread build-site!)) #:shortcut '(cmd #\B) #:enabled? @has-site?)
     (menu-item "Full Rebuild" (λ () (thread full-rebuild!)) #:shortcut '(cmd shift #\B) #:enabled? @has-site?)
     (menu-item-separator)
-    (menu-item "Add site…" on-add-site)
-    (menu-item "Remove this site…" on-remove-site)
+    (menu-item "Add site…" on-add-site #:enabled? @switching-enabled?)
+    (menu-item "Remove this site…" on-remove-site #:enabled? @switching-enabled?)
     (menu-item-separator)
     (menu-item "Preferences…" (λ () (render (?prefs)))))))
 
@@ -842,6 +869,7 @@
 (define pref-wide-control 240)
 
 (define (change-font-slot! idx)
+  (force editor-support)
   (define f (choose-font (get-main-frame) (slot-font idx)))
   (when f
     (define face (or (send f get-face)
@@ -1051,7 +1079,7 @@
     (hpanel
      (vpanel #:min-size '(180 #f)
              #:stretch '(#f #t)
-             (button "➕ Add Site" on-add-site #:min-size '(150 40))
+             (button "➕ Add Site" on-add-site #:min-size '(150 40) #:enabled? @switching-enabled?)
              :sites-choice
              :folders-table)
      (vpanel
@@ -1065,12 +1093,23 @@
 ;; ============================================================================
 ;; Entry point
 
+;; framework loads while the app is otherwise idle, or at once for anything
+;; that needs it sooner
+(define editor-support
+  (delay/idle
+   (init-appearance!)
+   (apply-active-font-slot!)
+   ;; framework installs its own (empty) preferences dialog as it loads
+   (install-preferences-handler!)))
+
+(define (install-preferences-handler!)
+  (application-preferences-handler (λ () (render (?prefs)))))
+
 (define (run-app)
   (application-about-handler (λ () (render (?about))))
-  ;; framework installed its own (empty) preferences dialog on this handler
-  (application-preferences-handler (λ () (render (?prefs))))
-  (init-appearance!)
-  (apply-active-font-slot!)
-  (when (obs-peek @site)
-    (build-site-async!))
-  (render §app))
+  (install-preferences-handler!)
+  (init-app-appearance!)
+  (begin0
+    (render §app)
+    ;; low priority: after the window's first paint
+    (queue-callback (λ () (thread load-selected-site!)) #f)))
