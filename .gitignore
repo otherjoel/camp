@@ -21,3 +21,4 @@ mysite/
 !camp-lib/private/template/static/*.css
 !camp/scribblings/scrbl-aux.css
 !camp-tests/tests/fixtures/test-site/static/**
+*.jsonc
