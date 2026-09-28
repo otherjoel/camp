@@ -28,7 +28,7 @@
          (only-in camp/app/private/settings
                   @vim-mode @fill-column @auto-fill? @line-numbers? @editor-geometry))
 
-(provide open-editor!)
+(provide open-editor! close-all-editors!)
 
 ;; ============================================================================
 ;; Text class
@@ -497,6 +497,12 @@
 (define (editor-frames)
   (for/list ([r (in-hash-values open-editors)]) (renderer-root r)))
 
+;; Closes every editor window, offering to save each modified buffer; #f if
+;; the user cancels, which leaves that window and any after it open
+(define (close-all-editors!)
+  (for/and ([f (in-list (editor-frames))])
+    (send f close-editor-window!)))
+
 (define (find-editor-canvas w)
   (cond
     [(is-a? w editor-canvas%) w]
@@ -600,9 +606,10 @@
                    [(positive? turns) (retry (sub1 turns))]))
            #f)))
       (define/public (close-editor-window!)
-        (when (send this can-close?)
-          (send this on-close)
-          (send this show #f)))
+        (and (send this can-close?)
+             (begin (send this on-close)
+                    (send this show #f)
+                    #t)))
       (define/augment (can-close?)
         (and (confirm-close! ed this) (inner #t can-close?)))
       ;; renderer-destroy is deferred: destroying the renderer from inside

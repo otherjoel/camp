@@ -40,7 +40,7 @@
 (lazy-require [camp/serve (start-server)]
               [camp/app/private/appearance (init-appearance!)]
               [camp/app/private/fonts (apply-active-font-slot! slot-font)]
-              [camp/app/private/editor (open-editor!)])
+              [camp/app/private/editor (open-editor! close-all-editors!)])
 
 ;; The app reloads site modules in-process for its lifetime, so site
 ;; bytecode must be cleared as sites load (see camp/private/rerequire)
@@ -113,7 +113,13 @@
            [else (load-site path)]))))
 
 (define/obs @site #f)
-(obs-observe! @site-selection (λ (spec) (@site . := . (load-site-from-spec spec))))
+;; Renotifying the current spec (to reset the site menu) doesn't reload it
+(obs-observe! @site-selection
+              (let ([loaded (obs-peek @site-selection)])
+                (λ (spec)
+                  (unless (equal? spec loaded)
+                    (set! loaded spec)
+                    (@site . := . (load-site-from-spec spec))))))
 
 (define @site-root (obs-map @site (λ (s) (and s (site-root s)))))
 
@@ -159,9 +165,7 @@
     (log-msg "Loading ~a…" (site-spec->display-name spec))
     (dynamic-wind
      void
-     (λ ()
-       (@site . := . (load-site-from-spec spec))
-       (@folder-selection . := . (vec-ref? (obs-peek @folders) 0)))
+     (λ () (@site . := . (load-site-from-spec spec)))
      (λ () (@loading? . := . #f)))
     (build-site!)))
 
@@ -195,6 +199,23 @@
    @refresh-counter))
 
 (define @folder-selection (@ (vec-ref? (obs-peek @folders) 0)))
+;; The folder table's highlight; see track-folder-selection!
+(define/obs @folder-index #f)
+
+(define (folder-index folders folder)
+  (for/first ([f (in-vector folders)] [i (in-naturals)] #:when (equal? f folder)) i))
+
+;; Keeps a folder selected whenever the folder list changes (a site switch
+;; picks the new site's first folder) and re-shows it in the table, which
+;; drops its highlight whenever its entries change. Installed after the main
+;; window renders, so the table's own update is queued first.
+(define (track-folder-selection!)
+  (obs-observe!
+   @folders
+   (λ (folders)
+     (unless (folder-index folders (obs-peek @folder-selection))
+       (@folder-selection . := . (vec-ref? folders 0)))
+     (@folder-index . := . (folder-index folders (obs-peek @folder-selection))))))
 
 (define @source-doc-selection (@ ""))
 (define-values (date-col title-col status-col file-col fullpath) (values 0 1 2 3 4))
@@ -267,12 +288,17 @@
 ;; ============================================================================
 ;; Components: Site selection
 
+;; Editor windows belong to the site they were opened from (a save rebuilds
+;; the current site), so they close first; cancelling a save prompt cancels
+;; the switch
 (define (on-site-select v)
-  (log-msg "Switched to site: ~a" v)
-  (mindful-demure-server-stop)
-  (@site-selection . := . v)
-  (@folder-selection . := . (vec-ref? (obs-peek @folders) 0))
-  (build-site-async!))
+  (cond
+    [(close-editors!)
+     (log-msg "Switched to site: ~a" v)
+     (mindful-demure-server-stop)
+     (@site-selection . := . v)
+     (build-site-async!)]
+    [else (@site-selection . <~ . values)]))
 
 (define :sites-choice
   (choice @sites on-site-select
@@ -301,6 +327,7 @@
 (define :folders-table
   (table '("Folders") @folders
          on-folder-select
+         #:selection @folder-index
          #:entry->row path->table-row))
 
 ;; ============================================================================
@@ -313,10 +340,18 @@
       (obs-update! @refresh-counter add1)
       (trigger-refresh!)))
 
+;; Set once the editor module loads; until then there are no editor windows
+;; to close, and closing none shouldn't load it
+(define editor-used? #f)
+
+(define (close-editors!)
+  (or (not editor-used?) (close-all-editors!)))
+
 (define (edit-source p)
   (cond
     [(use-internal-editor? (obs-peek @editor))
      (force editor-support)
+     (set! editor-used? #t)
      (open-editor! p #:on-save handle-editor-save!)]
     [else (edit-source/external p)]))
 
@@ -1073,7 +1108,14 @@
    #:title "Camp"
    #:mixin (λ (%)
              ((remember-geometry-mix @main-geometry)
-              (dragdrop-mix (class % (super-new) (set-main-frame! this)))))
+              (dragdrop-mix
+               (class %
+                 (super-new)
+                 (set-main-frame! this)
+                 ;; With the main window gone there's no way back to it,
+                 ;; so its editor windows go too
+                 (define/augment (can-close?)
+                   (and (close-editors!) (inner #t can-close?)))))))
    :main-menu
    (vpanel
     (hpanel
@@ -1111,5 +1153,6 @@
   (init-app-appearance!)
   (begin0
     (render §app)
+    (track-folder-selection!)
     ;; low priority: after the window's first paint
     (queue-callback (λ () (thread load-selected-site!)) #f)))
