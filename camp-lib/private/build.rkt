@@ -403,14 +403,11 @@
 
     (generate-feeds! site info contexts-by-slug)
 
-    ;; Remove orphaned HTML files from previous builds
-    (define static-rel
-      (and (directory-exists? static-dir)
-           (path->string (find-relative-path (site-root site) static-dir))))
+    ;; Remove orphaned HTML files from previous builds. Static files are copied to the top of the
+    ;; output folder, so an output file came from static/ when the same relative path exists there.
     (define (under-static? p)
-      (and static-rel
-           (let ([rel (path->string (find-relative-path output-dir p))])
-             (string-prefix? rel static-rel))))
+      (and (directory-exists? static-dir)
+           (file-exists? (build-path static-dir (find-relative-path output-dir p)))))
     (define deleted-rel-paths
       (for/list ([p (in-directory output-dir)]
                  #:when (and (regexp-match? #rx"\\.html$" (path->string p))
