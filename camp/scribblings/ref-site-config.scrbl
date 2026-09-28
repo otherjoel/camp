@@ -395,15 +395,19 @@ Calling @racket[load-site] again in the same process reflects any changes saved 
 configuration module in the meantime; the GUI app and @tt{raco camp serve} rely on this to
 reload the site when its configuration changes.
 
-When called in a live-reloading context (the GUI app, or @tt{raco camp serve} with watching
-enabled), @racket[load-site] also marks the site's directory as the boundary of a private
-bytecode cache (a @filepath{camp-live} subfolder of each @filepath{compiled} folder). Bytecode
-produced by @tt{raco setup} prevents modules from being reloaded after edits, so live sessions
-instead compile site modules into this cache without that restriction, and reuse it across
-sessions: unchanged modules never recompile, though a module is rebuilt when a library it
-links against gets recompiled (for example by @tt{raco setup} after a Racket upgrade).
-Bytecode produced by @tt{raco setup} or @tt{raco make} is neither loaded nor disturbed, so
-one-shot commands like @tt{raco camp build} keep their own compile cache.}
+@racket[load-site] marks the site's directory as the boundary of the site's compiled bytecode. In a
+one-shot command like @tt{raco camp build}, Camp compiles any site module whose bytecode is missing
+or older than its source before loading it, as @exec{raco make} would, so later builds load it
+without expanding it again. Modules outside the boundary are never compiled by Camp.
+
+In a live-reloading context (the GUI app, or @tt{raco camp serve} with watching enabled), the
+boundary instead delimits a private bytecode cache (a @filepath{camp-live} subfolder of each
+@filepath{compiled} folder). Bytecode produced by @tt{raco setup} prevents modules from being
+reloaded after edits, so live sessions instead compile site modules into this cache without that
+restriction, and reuse it across sessions: unchanged modules never recompile, though a module is
+rebuilt when a library it links against gets recompiled (for example by @tt{raco setup} after a
+Racket upgrade). Live sessions neither load nor disturb the regular bytecode, so one-shot commands
+keep their own compile cache.}
 
 @defproc[(resolve-site-spec [spec (or/c path? string? symbol?)]) (or/c path? #f)]{
 Resolves a site specification to a path. The @racket[_spec] can be:

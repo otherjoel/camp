@@ -19,7 +19,7 @@
          punct/fetch
          (only-in camp/private/collections load-doc)
          (only-in camp/private/log camp-logger)
-         (only-in camp/private/rerequire live-reload? live-cache-root! rerequire!))
+         (only-in camp/private/rerequire live-reload? site-cache-root! rerequire!))
 
 ;; Edits within the same real-time second would evade rerequire's mtime
 ;; checks, while future-dated sources are refused by the compilation manager.
@@ -78,6 +78,46 @@
 (check-false (live-zo-exists? keep-page) "one-shot loads must not write the live cache")
 (delete-directory/files keep-dir)
 
+;; One-shot loads compile missing or stale bytecode for the site's modules,
+;; so later builds skip expanding them again, but leave modules outside the
+;; cache boundary alone. A source touched after compiling (by a checkout, say)
+;; is stale even when unchanged.
+
+(define oneshot-dir (make-temporary-directory "load-doc-test-oneshot-~a"))
+(define oneshot-lib-dir (make-temporary-directory "load-doc-test-oneshot-lib-~a"))
+(define oneshot-lib (build-path oneshot-lib-dir "outlib.rkt"))
+(define oneshot-helper (build-path oneshot-dir "helper.rkt"))
+(define oneshot-page (build-path oneshot-dir "page.md.rkt"))
+(define touched-page (build-path oneshot-dir "touched.md.rkt"))
+
+(write-mod! oneshot-lib
+            "#lang racket/base\n(provide twice)\n(define (twice s) (string-append s s))\n")
+(write-mod! oneshot-helper
+            (format "#lang racket/base\n(require (file ~s))\n(provide greeting)\n(define (greeting) (twice \"ONE-SHOT \"))\n"
+                    (path->string oneshot-lib)))
+(write-dep-page! oneshot-page "•greeting[]")
+(write-page! touched-page "TOUCHED PAGE")
+(raco-make! touched-page)
+(file-or-directory-modify-seconds (get-compilation-bytecode-file touched-page) (- virtual-now 500))
+
+(define (zo-fresh? src)
+  (define zo (get-compilation-bytecode-file src))
+  (and (file-exists? zo)
+       (>= (file-or-directory-modify-seconds zo) (file-or-directory-modify-seconds src))))
+
+(site-cache-root! oneshot-dir)
+(check-false (zo-fresh? touched-page))
+(check-regexp-match #rx"ONE-SHOT ONE-SHOT" (doc-body-string oneshot-page))
+(check-regexp-match #rx"TOUCHED PAGE" (doc-body-string touched-page))
+(check-true (zo-fresh? oneshot-page) "one-shot loads must compile site sources")
+(check-true (zo-fresh? oneshot-helper) "one-shot loads must compile in-site dependencies")
+(check-true (zo-fresh? touched-page) "one-shot loads must refresh stale bytecode")
+(check-false (file-exists? (get-compilation-bytecode-file oneshot-lib))
+             "one-shot loads must not compile modules outside the boundary")
+(check-false (live-zo-exists? oneshot-page) "one-shot loads must not write the live cache")
+(delete-directory/files oneshot-dir)
+(delete-directory/files oneshot-lib-dir)
+
 ;; Everything below exercises live-reload mode (GUI app, raco camp serve)
 (live-reload? #t)
 
@@ -119,7 +159,7 @@
 (write-helper! helper "HELLO FROM V1")
 (write-dep-page! dep-page "•greeting[]")
 
-(live-cache-root! dep-dir)
+(site-cache-root! dep-dir)
 (check-regexp-match #rx"HELLO FROM V1" (doc-body-string dep-page))
 
 (write-helper! helper "HELLO FROM V2")
@@ -192,7 +232,7 @@
   (rerequire! share-render)
   ((dynamic-require share-render 'render)))
 
-(live-cache-root! share-dir)
+(site-cache-root! share-dir)
 (check-equal? (share-render-string) "SHARED V1")
 (for ([page (in-list share-pages)])
   (check-regexp-match #rx"SHARED V1" (doc-body-string page)))
@@ -234,7 +274,7 @@
 (managed-compile-zo page-c)
 (define page-c-zo (get-compilation-bytecode-file page-c))
 
-(live-cache-root! zo-dir)
+(site-cache-root! zo-dir)
 (check-regexp-match #rx"COMPILED ONE" (doc-body-string page-c))
 
 (write-page! page-c "COMPILED TWO")
@@ -257,7 +297,7 @@
 (write-dep-page! cdep-page "•greeting[]")
 (raco-make! cdep-page)
 
-(live-cache-root! cdep-dir)
+(site-cache-root! cdep-dir)
 (check-regexp-match #rx"COMPILED DEP V1" (doc-body-string cdep-page))
 
 (write-helper! chelper "COMPILED DEP V2")
@@ -282,7 +322,7 @@
                     (path->string outside-lib)))
 (write-dep-page! site-page "•greeting[]")
 
-(live-cache-root! site-dir)
+(site-cache-root! site-dir)
 (check-regexp-match #rx"IN-SITE IN-SITE" (doc-body-string site-page))
 (check-true (live-zo-exists? site-page) "live loads must cache page bytecode")
 (check-true (live-zo-exists? site-helper) "live loads must cache in-site dependencies")
@@ -305,7 +345,7 @@
   (parameterize ([current-output-port out])
     (check-true (system* (build-path (find-console-bin-dir) "racket")
                          "-l" "racket/base" "-l" "camp/private/rerequire" "-l" "camp/private/collections"
-                         "-e" (format "(live-reload? #t) (live-cache-root! ~s) (display (load-doc (string->path ~s)))"
+                         "-e" (format "(live-reload? #t) (site-cache-root! ~s) (display (load-doc (string->path ~s)))"
                                       (path->string site) (path->string page)))))
   (get-output-string out))
 
@@ -329,7 +369,7 @@
 (write-dep-page! relink-page "•greeting[]")
 (raco-make! relink-out)
 
-(live-cache-root! relink-site)
+(site-cache-root! relink-site)
 (check-regexp-match #rx"RELINKRELINK" (doc-body-string relink-page))
 (define relink-helper-dep (path-replace-extension (live-zo relink-helper) #".dep"))
 (define relink-recorded (file->string relink-helper-dep))

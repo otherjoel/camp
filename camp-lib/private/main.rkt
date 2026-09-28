@@ -111,8 +111,7 @@
       [else
        (resolve-module-path mod-path #f)]))
   (define site-root (simplify-path (build-path resolved 'up)))
-  (when (live-reload?)
-    (live-cache-root! site-root))
+  (site-cache-root! site-root)
   (rerequire! resolved)
   (define site-config (dynamic-require resolved 'toml))
   (define get-info (get-info/full site-root))

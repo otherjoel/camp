@@ -9,7 +9,7 @@
          "log.rkt")
 
 (provide live-reload?
-         live-cache-root!
+         site-cache-root!
          rerequire!)
 
 ;; Bytecode produced by raco setup/make is compiled with constant enforcement,
@@ -20,8 +20,9 @@
 ;; and declared from there by rerequire!, never by the regular loader. The
 ;; cache persists across sessions, so only changed sources ever recompile.
 ;; All loading of site modules must go through rerequire! (or
-;; load-doc/load-site, which use it); outside live-reload mode it does
-;; nothing, and the caller's own dynamic-require loads as usual.
+;; load-doc/load-site, which use it). Outside live-reload mode it only
+;; brings the regular bytecode of site modules up to date, as raco make
+;; would, and the caller's own dynamic-require loads as usual.
 ;;
 ;; racket/rerequire is not used: it forgets what it reloaded from one call to
 ;; the next, so of several dependents of an edited module, each loaded by a
@@ -36,7 +37,7 @@
 ;; the cache, never tracked for reload, and must always enter the live
 ;; namespace from their installed bytecode.
 (define cache-root (box #f))
-(define (live-cache-root! root)
+(define (site-cache-root! root)
   (set-box! cache-root (path->directory-path (simple-form-path root))))
 
 ;; split-path returns parent dirs in trailing-slash form, matching cache-root
@@ -72,7 +73,7 @@
                         (cons -inf.0 ""))]
              [seen (hash-ref stamps p #f)])
          (hash-set! stamps p stamp)
-         (when (and seen (not (equal? (car seen) (car stamp))))
+         (when (and seen (live-reload?) (not (equal? (car seen) (car stamp))))
            (log-camp-warning "Recompiled since this session started; restart to use it: ~a" p)
            (raise (exn:stale-namespace)))
          stamp)))
@@ -230,11 +231,20 @@
 
 ;; ---------------------------------------------------------------------------
 
+;; A module already declared cannot be redeclared outside live-reload mode,
+;; so its bytecode is not checked again
+(define (compile-stale! path)
+  (unless (module-declared? (make-resolved-module-path path))
+    (parameterize ([manager-skip-file-handler (skip-outside path)])
+      (managed-compile-zo path))))
+
 (define (rerequire! mod)
-  (when (live-reload?)
-    (define path
-      (with-handlers ([exn:fail? (λ (_) #f)])
-        (module-file (if (path? mod) mod (resolve-module-path mod #f)) #f)))
-    (when path
-      (compile-live! path)
-      (void (refresh! path)))))
+  (define path
+    (with-handlers ([exn:fail? (λ (_) #f)])
+      (module-file (if (path? mod) mod (resolve-module-path mod #f)) #f)))
+  (cond
+    [(not path) (void)]
+    [(live-reload?)
+     (compile-live! path)
+     (void (refresh! path))]
+    [(in-cache? path) (compile-stale! path)]))
