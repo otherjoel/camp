@@ -88,6 +88,20 @@
      (check-equal? (fill-unit (vector "- one" "- two aaa bbb" "- three") 1 7)
                    (list 1 1 "- two\n  aaa\n  bbb")))
 
+   (test-case "fill-unit treats a wrapped number other than 1 as paragraph text"
+     (define para (vector "The right wing didn't care before" "2018. Then my district elected"))
+     (check-equal? (fill-unit para 1 80)
+                   (list 0 1 "The right wing didn't care before 2018. Then my district elected"))
+     (check-equal? (fill-unit (vector "aaa bbb" "2018. ccc ddd") 1 9)
+                   (list 0 1 "aaa bbb\n2018. ccc\nddd"))
+     (check-equal? (auto-filled '("aaa" "2018. ccc ddd") 1 9) "2018. ccc\nddd"))
+
+   (test-case "fill-unit still splits at markers that can interrupt a paragraph"
+     (check-equal? (fill-unit (vector "aaa" "1. bbb") 1 80) (list 1 1 "1. bbb"))
+     (check-equal? (fill-unit (vector "aaa" "- bbb") 1 80) (list 1 1 "- bbb"))
+     (check-equal? (fill-unit (vector "1. aaa" "2. bbb ccc") 1 7) (list 1 1 "2. bbb\n   ccc"))
+     (check-equal? (fill-unit (vector "aaa" "" "7. bbb ccc") 2 7) (list 2 2 "7. bbb\n   ccc")))
+
    (test-case "fill-unit from a continuation line fills the whole owning item"
      (check-equal? (fill-unit (vector "- aaa bbb" "lazy ccc") 1 20)
                    (list 0 1 "- aaa bbb lazy ccc")))
