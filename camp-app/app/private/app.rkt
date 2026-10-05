@@ -7,7 +7,7 @@
          (only-in camp/private/xref normalize-slug)
          (only-in camp/private/watch start-watcher! get-watch-paths path-change-type)
          (only-in camp/private/output format-duration with-timing)
-         (only-in gregor iso8601->date)
+         (only-in camp/private/dates current-site-timezone meta->moment)
          net/sendurl
          racket/exn
          racket/gui
@@ -738,7 +738,9 @@
        (if (and output-pattern (non-empty-string? actual-slug))
            (with-handlers ([exn:fail? (λ (_) "")])
              (define date-val
-               (and (non-empty-string? date) (iso8601->date date)))
+               (and (non-empty-string? date)
+                    (parameterize ([current-site-timezone (site-timezone site)])
+                      (meta->moment date))))
              (define metas (peek-metas-hash))
              (output-path->url
               (format-output-path output-pattern actual-slug date-val

@@ -29,6 +29,7 @@
          copy-static-files
          sync-static-files
          build-context
+         doc-output-path
          output-path->url)  ; re-exported from collections.rkt
 
 ;; ---------------------------------------------------------------------------
@@ -127,13 +128,7 @@
   (define pages
     (for/list ([raw-page (in-list sorted-pages)])
       (match-define (list source-path slug doc) raw-page)
-      (define date-val (get-page-date doc))
-      (define output-path
-        (let ([override (meta-ref doc 'output-path)])
-          (if override
-              (normalize-output-path override)
-              (format-output-path output-pattern slug date-val (document-metas doc)))))
-      (page source-path output-path doc slug coll-name)))
+      (page source-path (doc-output-path doc slug output-pattern) doc slug coll-name)))
 
   (define seen (make-hash))
   (for ([p (in-list pages)])
@@ -148,6 +143,12 @@
     (hash-set! seen op p))
 
   pages)
+
+(define (doc-output-path doc slug output-pattern)
+  (define override (meta-ref doc 'output-path))
+  (if override
+      (normalize-output-path override)
+      (format-output-path output-pattern slug (get-page-date doc) (document-metas doc))))
 
 (define (get-page-date doc)
   (define raw-date (meta-ref doc 'date))
