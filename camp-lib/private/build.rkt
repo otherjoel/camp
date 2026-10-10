@@ -85,7 +85,8 @@
                                     "no page found with slug: ~a" slug))))
   (define ctx (build-context pg
                              (page-collection-name pg)
-                             (site-info-taxonomy-index info)))
+                             (site-info-taxonomy-index info)
+                             (site-root site)))
   (parameterize ([current-site-info info]
                  [current-output-dir (site-output-dir site)]
                  [current-site-timezone (site-timezone site)])
@@ -361,7 +362,7 @@
     (define contexts-by-slug
       (for/hash ([p (in-list pages)])
         (define coll-name (page-collection-name p))
-        (define ctx (build-context p coll-name taxonomy-index))
+        (define ctx (build-context p coll-name taxonomy-index root-dir))
         (values (page-slug p) ctx)))
 
     ;; Render pages using stored contexts
@@ -386,7 +387,7 @@
          ;; Build paginated pages
          (set! page-count
                (+ page-count
-                  (build-paginated-page! p pagination-result render-fn output-dir info
+                  (build-paginated-page! p ctx pagination-result render-fn output-dir info
                                          generated-files)))]
         [else
          ;; Normal page rendering
@@ -424,7 +425,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Paginated Page Building
 
-(define (build-paginated-page! page pc render-fn output-dir info generated-files)
+(define (build-paginated-page! page base-ctx pc render-fn output-dir info generated-files)
   (define coll-name (paginated-content-collection-name pc))
   (define per-page (paginated-content-per-page pc))
   (define page-slug-str (paginated-content-page-slug pc))
@@ -499,12 +500,12 @@
 
     ;; Build context for this page
     (define ctx
-      (hasheq 'slug (if (= page-num 1)
-                        (page-slug page)
-                        (format "~a/~a/~a" (page-slug page) page-slug-str page-num))
-              'url current-url
-              'collection (page-collection-name page)
-              'taxonomies (hash)))
+      (hash-set* base-ctx
+                 'slug (if (= page-num 1)
+                           (page-slug page)
+                           (format "~a/~a/~a" (page-slug page) page-slug-str page-num))
+                 'url current-url
+                 'taxonomies (hash)))
 
     ;; Render through normal render function
     (define html-xexpr (render-fn synthetic-doc ctx))
@@ -532,15 +533,17 @@
 ;; ---------------------------------------------------------------------------
 ;; Context Building
 
-(define (build-context p coll-name taxonomy-index)
-  (define slug (page-slug p))
-  (define url (output-path->url (page-output-path p)))
+(define (build-context p coll-name taxonomy-index root)
   (define doc (page-doc p))
-  (define page-taxonomies (build-page-taxonomies doc taxonomy-index coll-name))
-  (hasheq 'slug slug
-          'url url
-          'collection coll-name
-          'taxonomies page-taxonomies))
+  (context (page-slug p)
+           (output-path->url (page-output-path p))
+           coll-name
+           (build-page-taxonomies doc taxonomy-index coll-name)
+           (source-path->string root (page-source-path p))))
+
+(define (source-path->string root path)
+  (string-join (map path-element->string (explode-path (find-relative-path root path)))
+               "/"))
 
 (define (build-page-taxonomies doc taxonomy-index coll-name)
   (define coll-taxes (hash-ref taxonomy-index coll-name #f))

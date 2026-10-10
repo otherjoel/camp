@@ -90,7 +90,8 @@
   (slug
    url
    collection
-   taxonomies))
+   taxonomies
+   [source #:default #f]))
 
 ;; ---------------------------------------------------------------------------
 ;; Book publishing hash-views

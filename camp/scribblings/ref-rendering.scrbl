@@ -19,14 +19,22 @@ metadata.
 @defhashview[context ([slug string?]
                        [url string?]
                        [collection string?]
-                       [taxonomies hash?])]{
+                       [taxonomies hash?]
+                       [source (or/c string? #f) #:default #f])]{
 
 A @tech{hash-view} representing a @tech{render context}. The context is passed to render functions
 and provides access to taxonomy data.
 
 The @racket[url] field contains the canonical URL for the current page. The @racket[taxonomies]
 field maps taxonomy keys to lists of normalized values for the current page. Use the @racket[prev]
-and @racket[next] functions with a context to navigate between pages.}
+and @racket[next] functions with a context to navigate between pages.
+
+The @racket[source] field is the path of the page's source file, relative to the site root (the
+folder containing the @tt{camp/site} file), with @racket["/"] as the separator on every platform:
+for example, @racket["blog/hello-world.md.rkt"]. It does not depend on the page's slug, so it is
+suitable for building links to the file in a version control web interface. Every page generated
+by a paginated @tt{camp/page} document has the same @racket[source]. Contexts constructed by
+other code may omit it, in which case @racket[context-source] returns @racket[#f].}
 
 @section[#:tag "ref-html-rendering"]{HTML Rendering}
 

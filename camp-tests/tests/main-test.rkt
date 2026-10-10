@@ -91,6 +91,11 @@
 (check-equal? (hash-ref test-context 'slug) "my-post")
 (check-equal? (hash-ref test-context 'url) "/blog/2024/01/my-post/")
 
+(check-false (context-source test-context))
+(check-equal? (context-source (context "my-post" "/my-post/" "blog" (hasheq)
+                                       "blog/my-post.md.rkt"))
+              "blog/my-post.md.rkt")
+
 ;; ---------------------------------------------------------------------------
 ;; load-site tests
 
